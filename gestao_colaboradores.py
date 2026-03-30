@@ -397,12 +397,7 @@ if arquivos_carregados:
             )
             st.plotly_chart(fig_pie, width="stretch")
 
-        if not erro_ativo.empty:
-            st.write(erro_ativo)
-        if not vazio_dt.empty:
-            st.error(f" {len(vazio_dt)} Datas não preenchidas")
-            with st.expander(":material/Do_Not_Disturb_On: Verificar Datas Vazias"):
-                st.write(vazio_dt)
+
 
     with tabs[1]:
         st.markdown("# Experiência")
@@ -518,6 +513,13 @@ if arquivos_carregados:
                     st.write(f"Linha vazia em: {col}")
                     lin_vazia[["EMPRESA",col]]
 
+
+        if not erro_ativo.empty:
+            st.write(erro_ativo)
+        if not vazio_dt.empty:
+            st.error(f" {len(vazio_dt)} Datas não preenchidas")
+            with st.expander(":material/Do_Not_Disturb_On: Verificar Datas Vazias"):
+                st.write(vazio_dt)
 else:
     st.info("Aguardando upload do arquivo para gerar os indicadores.")
     
