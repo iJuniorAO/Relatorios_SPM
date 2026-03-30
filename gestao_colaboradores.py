@@ -228,13 +228,49 @@ def trata_turn_over(df):
     
     turnover_por_cargo = df[df['Status'] == 'DESLIGADO'].groupby('Cargo').size().reset_index(name='Total Desligamentos')
     
-    print(df.columns)
 
     return {
         "df_mensal": df_metrics,
         "turnover_cargo": turnover_por_cargo.sort_values(by='Total Desligamentos', ascending=False),
         "media_turnover": round(df_metrics['Turnover %'].mean(), 2)
     }
+
+def processar_faixa_etaria(df):
+    # Calcular a idade
+    df['Idade'] = df['Data de Nascimento'].apply(
+        lambda x: HOJE_ANO - x.year - ((HOJE_MES, HOJE.day) < (x.month, x.day))
+    )
+    
+    # Definir os cortes e os nomes das faixas
+    bins = [0, 18, 25, 35, 45, 60, 100]
+    labels = ['Até 18 anos', '19-25 anos', '26-35 anos', '36-45 anos', '46-60 anos', 'Mais de 60']
+    df['Faixa Etária'] = pd.cut(df['Idade'], bins=bins, labels=labels, right=False)
+
+    df['Faixa Etária'] = pd.Categorical(
+    df['Faixa Etária'], 
+    categories=labels, 
+    ordered=True
+    )
+    df = df.sort_values('Faixa Etária')
+        
+    return df
+
+def processar_dados_piramide(df):
+    """
+    Agrupa os dados por Faixa Etária e Sexo, transformando o 
+    contingente masculino em valores negativos para o gráfico.
+    """
+    # Agrupamento e contagem
+    df_agrupado = df.groupby(['Faixa Etária', 'Sexo']).size().reset_index(name='Contagem')
+    
+    # Separando os dados
+    msc = df_agrupado[df_agrupado['Sexo'] == 'MASCULINO'].copy()
+    fem = df_agrupado[df_agrupado['Sexo'] == 'FEMININO'].copy()
+    
+    # Invertendo o valor do masculino para a esquerda (negativo)
+    msc['Contagem'] = msc['Contagem'] * -1
+    
+    return msc, fem
 
 
 st.markdown("# :material/Bar_chart: Gestão de Colaboradores")
@@ -271,6 +307,8 @@ if arquivos_carregados:
 
     metrics = trata_turn_over(df)
 
+    df_idade = processar_faixa_etaria(df_ativos)
+
     tabs = st.tabs(["Visão Geral", "Prazos e Alertas", "Aniversariantes", "Turn-Over"])
 
     with tabs[0]:
@@ -285,9 +323,7 @@ if arquivos_carregados:
             hole=0.6,
             color_discrete_sequence=px.colors.qualitative.Pastel)
         df_cont_empresa = df_cont_empresa.set_index("EMPRESA")
-
         
-
         df_cont_genero = df_ativos.groupby(["EMPRESA","Sexo"]).size().reset_index(name="Total")        
         fig_cont_genero = px.bar(
             df_cont_genero,
@@ -317,7 +353,6 @@ if arquivos_carregados:
 
         st.divider()
         
-        
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("### Distribuição por Empresa")
@@ -330,25 +365,37 @@ if arquivos_carregados:
 
         st.markdown("### Colaboradores por Gênero")
         st.plotly_chart(fig_cont_genero,width="stretch")
-        
-        st.divider()
-        st.markdown("# Erros e Avisos")
-        if not df_exp_vencido.empty:
-            st.warning(f":material/Do_Not_Disturb_On: {len(df_exp_vencido)} Experiências Vencidas")
-        if not vencimento_90.empty:
-            st.error(f":material/Id_Card: {len(vencimento_90)} CNHs vencendo em breve")
-        if df_exp_vencido.empty and vencimento_90.empty:
-            st.success(":material/Check: Nenhum alerta crítico pendente")
-        if not df_info_vazio.empty:
-            st.error(f"{len(df_info_vazio)} Linhas Vazias")
-            with st.expander(":material/Do_Not_Disturb_On: Verificar linhas vazias"):
-                col_vazio = df_info_vazio.columns
-                for col in col_vazio:
-                    lin_vazia = df_info_vazio[df_info_vazio[col].isna()]
-                    if not lin_vazia.empty:
-                        st.write(f"Linha vazia em: {col}")
-                        lin_vazia[["EMPRESA",col]]
-        
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Distribuição por Faixa Etária")
+
+            df_counts = df_idade['Faixa Etária'].value_counts(sort=False).reset_index()
+            df_counts.columns = ['Faixa Etária', 'Quantidade']
+            
+            fig_bar = px.bar(
+                df_counts, 
+                x='Faixa Etária', 
+                y='Quantidade',
+                text='Quantidade',
+                color='Faixa Etária',
+                color_discrete_sequence=px.colors.qualitative.Prism,
+                template="plotly_white"
+            )
+            fig_bar.update_traces(textposition='outside')
+            st.plotly_chart(fig_bar, width="stretch")
+
+        with col2:
+            st.subheader("Percentual por Gênero/Sexo")
+            # Gráfico de Pizza para complementar a análise demográfica
+            fig_pie = px.pie(
+                df_idade, 
+                names='Sexo', 
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            st.plotly_chart(fig_pie, width="stretch")
 
         if not erro_ativo.empty:
             st.write(erro_ativo)
@@ -453,8 +500,23 @@ if arquivos_carregados:
             st.subheader("Dados Consolidados")
             st.dataframe(metrics['df_mensal'].set_index("Mês"), width="stretch")
                 
-
-
+    st.divider()
+    st.markdown("# Erros e Avisos")
+    if not df_exp_vencido.empty:
+        st.warning(f":material/Do_Not_Disturb_On: {len(df_exp_vencido)} Experiências Vencidas")
+    if not vencimento_90.empty:
+        st.error(f":material/Id_Card: {len(vencimento_90)} CNHs vencendo em breve")
+    if df_exp_vencido.empty and vencimento_90.empty:
+        st.success(":material/Check: Nenhum alerta crítico pendente")
+    if not df_info_vazio.empty:
+        st.error(f"{len(df_info_vazio)} Linhas Vazias")
+        with st.expander(":material/Do_Not_Disturb_On: Verificar linhas vazias"):
+            col_vazio = df_info_vazio.columns
+            for col in col_vazio:
+                lin_vazia = df_info_vazio[df_info_vazio[col].isna()]
+                if not lin_vazia.empty:
+                    st.write(f"Linha vazia em: {col}")
+                    lin_vazia[["EMPRESA",col]]
 
 else:
     st.info("Aguardando upload do arquivo para gerar os indicadores.")
