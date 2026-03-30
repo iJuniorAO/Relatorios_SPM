@@ -4,3 +4,4 @@ plotly
 numpy
 xlrd
 supabase
+openpyxl
