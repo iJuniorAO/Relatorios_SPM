@@ -12,9 +12,11 @@ import locale
 st.set_page_config(page_title="Colaboradores Ativos", layout="wide")
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except:
-    locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
-
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
+    except locale.Error:
+        pass
 if False:   #   Posteriormente usar login
     if "user" not in st.session_state:
         st.session_state.user = None
