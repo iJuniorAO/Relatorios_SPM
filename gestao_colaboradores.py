@@ -6,9 +6,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import re
+import locale
 
 
 st.set_page_config(page_title="Colaboradores Ativos", layout="wide")
+locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 
 if False:   #   Posteriormente usar login
     if "user" not in st.session_state:
@@ -65,9 +67,11 @@ def carregar_dados_onedrive(input_texto):
 def importa_valida(df):
     df = df.drop(columns=["MesAdm","AnoAdm","AnosEmpresa","Tativo","MesDeslig","AnoDeslig","Exp 45 dias","Exp 90 dias", "Prazo EXP","MesAnv"])
 
+
+
     df_ativos = df[df["Status"].isin(["ATIVO","INSS"])]
     df_exp = df[df["Status"]=="EXPERIENCIA"]
-    df_CNH = df_ativos.dropna(subset=["Validade de CNH"]).copy()
+    df_CNH = df[df["Status"]!="DESLIGADO"].dropna(subset=["Validade de CNH"]).copy()
     df_aniversario = df_ativos[["Colaborador","EMPRESA","Admissão","Status","Data de Nascimento"]]
 
     df_validacao_ativo = df[df["Status"]!="DESLIGADO"]
@@ -91,7 +95,7 @@ def importa_valida(df):
     
 
     if not validacao_toxicologico.empty:
-        st.error(f"Erro no preenchimento referente a CNH")
+        st.warning(f"Erro no preenchimento referente a CNH")
         with st.expander(":material/Close: Verificar erros CNH"):
             if not validacao_toxicologico.empty:
                 st.write(f"{len(validacao_toxicologico)} - Exame toxicologico não preenchido")
@@ -110,20 +114,20 @@ def trata_df_exp(df_exp):
     df_exp['Vence_30d'] = df_exp['Admissão'] + pd.Timedelta(days=30)
     df_exp['Vence_90d'] = df_exp['Admissão'] + pd.Timedelta(days=90)
 
-    df_exp['Dias_para_30'] = (df_exp['Vence_30d'] - HOJE_DATA).dt.days
-    df_exp['Dias_para_90'] = (df_exp['Vence_90d'] - HOJE_DATA).dt.days
+    df_exp['Prazo_30_Dias'] = (df_exp['Vence_30d'] - HOJE_DATA).dt.days
+    df_exp['Prazo_90_Dias'] = (df_exp['Vence_90d'] - HOJE_DATA).dt.days
 
-    exp_30D = df_exp[df_exp["Dias_para_30"]>0]
-    exp_30D = exp_30D[["Colaborador","EMPRESA","Admissão","Vence_30d"]]
+    exp_30D = df_exp[df_exp["Prazo_30_Dias"]>0]
+    exp_30D = exp_30D[["Colaborador","EMPRESA","Admissão","Vence_30d","Prazo_30_Dias"]]
     exp_30D_empresa = exp_30D[["Colaborador","EMPRESA"]].groupby("EMPRESA").count()
     exp_30D = exp_30D.set_index("Colaborador").sort_values("Admissão")
 
-    exp_90D = df_exp[df_exp["Dias_para_30"]<0]
-    exp_90D = exp_90D[["Colaborador","EMPRESA","Admissão","Vence_90d"]]
+    exp_90D = df_exp[df_exp["Prazo_30_Dias"]<0]
+    exp_90D = exp_90D[["Colaborador","EMPRESA","Admissão","Vence_90d","Prazo_90_Dias"]]
     exp_90D_empresa = exp_90D[["Colaborador","EMPRESA"]].groupby("EMPRESA").count()
     exp_90D = exp_90D.set_index("Colaborador").sort_values("Admissão")
 
-    df_exp_vencido = df_exp[df_exp["Dias_para_90"]<0]
+    df_exp_vencido = df_exp[df_exp["Prazo_90_Dias"]<0]
 
 
     return df_exp, exp_30D, exp_30D_empresa, exp_90D, exp_90D_empresa, df_exp_vencido
@@ -134,25 +138,31 @@ def trata_df_CNH(df_CNH):
     vencimento_90 = vencimento_90.set_index("Colaborador")
     vencimento_90 = vencimento_90.sort_values("Validade de CNH")
     
+    
     vencimento_ano =df_CNH[df_CNH["Validade de CNH"]<= ULTIMO_DIA_ANO]
     vencimento_ano = vencimento_ano[["Colaborador","Validade de CNH","Telefone para Contato"]]
     vencimento_ano = vencimento_ano.set_index("Colaborador")
     vencimento_ano = vencimento_ano.sort_values("Validade de CNH")
+
+    vencimento_toxicologico = df_CNH[df_CNH["Validade Exame Toxicologico"]<=HOJE_DATA+ pd.Timedelta(days=90)]
+    vencimento_toxicologico = vencimento_toxicologico[["Colaborador","Validade Exame Toxicologico","Telefone para Contato"]]
+    vencimento_toxicologico = vencimento_toxicologico.set_index("Colaborador")
+    vencimento_toxicologico = vencimento_toxicologico.sort_values("Validade Exame Toxicologico")
     
     df_CNH = df_CNH.set_index("Colaborador")
 
-    return df_CNH, vencimento_90, vencimento_ano
+    return df_CNH, vencimento_90, vencimento_ano, vencimento_toxicologico
 
-def trata_df_aniv(df_aniversario):
+def trata_df_aniv(df_aniversario,mes_aniversario):
     df_aniversario['Mês de Nascimento'] = df_aniversario['Data de Nascimento'].dt.month
     df_aniversario['Mês de Admissão'] = df_aniversario['Admissão'].dt.month
     
 
 
-    niver_vida = df_aniversario[df_aniversario['Data de Nascimento'].dt.month == HOJE_MES].copy()
+    niver_vida = df_aniversario[df_aniversario['Data de Nascimento'].dt.month == mes_aniversario].copy()
     niver_vida['Dia'] = niver_vida['Data de Nascimento'].dt.day
 
-    niver_empresa = df_aniversario[df_aniversario['Admissão'].dt.month == HOJE_MES].copy()
+    niver_empresa = df_aniversario[df_aniversario['Admissão'].dt.month == mes_aniversario].copy()
     niver_empresa['Anos de Casa'] = HOJE_ANO - niver_empresa['Admissão'].dt.year
     niver_empresa['Dia'] = niver_empresa['Admissão'].dt.day
 
@@ -298,17 +308,49 @@ if arquivos_carregados:
     df = df[df["EMPRESA"].isin(empresa_selecionada)]
     
     df, df_ativos, df_exp, df_CNH, df_aniversario, df_info_vazio, vazio_dt, validacao_toxicologico, erro_ativo = importa_valida(df)
-    
     df_exp, exp_30D, exp_30D_empresa, exp_90D, exp_90D_empresa, df_exp_vencido = trata_df_exp(df_exp)
-
-    df_CNH, vencimento_90, vencimento_ano = trata_df_CNH(df_CNH)
-
-    niver_vida,niver_empresa,niver_grafico = trata_df_aniv(df_aniversario)
-
+    df_CNH, vencimento_90, vencimento_ano, vencimento_toxicologico = trata_df_CNH(df_CNH)
     metrics = trata_turn_over(df)
-
     df_idade = processar_faixa_etaria(df_ativos)
 
+    st.markdown("# Erros e Avisos")
+    if df_exp_vencido.empty and vencimento_90.empty and vencimento_toxicologico.empty:
+        st.success(":material/Check: Nenhum alerta crítico pendente")
+    else:
+        st.error(":material/Close: ALERTA CRÍTICO")
+    if not df_exp_vencido.empty:
+        st.warning(f":material/Do_Not_Disturb_On: {len(df_exp_vencido)} Experiências Vencidas")
+    if not vencimento_90.empty:
+        st.error(f":material/Id_Card: {len(vencimento_90)} CNHs vencendo")
+    if not vencimento_toxicologico.empty:
+        st.error(f":material/Id_Card: {len(vencimento_toxicologico)} Exame(s) vencendo")
+
+    st.space()
+    if not df_info_vazio.empty:
+        st.error(f"{len(df_info_vazio)} Linhas Vazias")
+        with st.expander(":material/Do_Not_Disturb_On: Verificar linhas vazias"):
+            col_vazio = df_info_vazio.columns
+            for col in col_vazio:
+                lin_vazia = df_info_vazio[df_info_vazio[col].isna()]
+                if not lin_vazia.empty:
+                    st.write(f"Linha vazia em: {col}")
+                    lin_vazia[["EMPRESA",col]]
+
+        if not erro_ativo.empty:
+            st.write(erro_ativo)
+        if not vazio_dt.empty:
+            st.error(f" {len(vazio_dt)} Datas não preenchidas")
+            with st.expander(":material/Do_Not_Disturb_On: Verificar Datas Vazias"):
+                st.dataframe(vazio_dt.style.format({"Admissão":"{:%d/%m/%Y}","Data de Nascimento":"{:%d/%m/%Y}"},na_rep=""))
+        st.divider()
+
+
+
+
+
+
+
+    st.space("medium")
     tabs = st.tabs(["Visão Geral", "Prazos e Alertas", "Aniversariantes", "Turn-Over"])
 
     with tabs[0]:
@@ -349,7 +391,7 @@ if arquivos_carregados:
         col_kpi1.metric("Colaboradores Ativos", len(df_ativos))
         col_kpi2.metric("Contratos em Exp.", len(df_exp))
         col_kpi3.metric("Motoristas", len(df_CNH))
-        col_kpi4.metric("Aniversariantes do Mês", len(niver_vida)+len(niver_empresa))
+        #col_kpi4.metric("Aniversariantes do Mês", len(niver_vida)+len(niver_empresa))
 
         st.divider()
         
@@ -431,11 +473,11 @@ if arquivos_carregados:
             "Salário Atual": "R$ {:,.2f}"
         }
         st.write((f"### Motoristas Ativos | :blue[{len(df_CNH)} Motoristas]"))
-        st.write(df_CNH.style.format({"Validade de CNH": "{:%d/%m/%Y}","Validade Exame Toxicologico": "{:%d/%m/%Y}"}))
+        st.write(df_CNH.style.format({"Validade de CNH": "{:%d/%m/%Y}","Validade Exame Toxicologico": "{:%d/%m/%Y}"},na_rep="-"))
 
         st.space()
         st.markdown(("## Vencimento CNH"))
-        co1, co2 = st.columns(2)
+        co1, co2, co3 = st.columns(3)
 
         with co1:
             st.markdown(("### :material/Hourglass: CNH Vencimento em 90 dias"))
@@ -450,17 +492,26 @@ if arquivos_carregados:
             else:
                 st.warning(f"{len(vencimento_ano)} CNH vencendo até o fim do ano")
                 st.write(vencimento_ano.style.format({"Validade de CNH": "{:%d/%m/%Y}"}))
-
+        with co3:
+            st.markdown(("### :material/Hourglass: Exame Vencimento em 90 dias"))
+            if vencimento_toxicologico.empty:
+                st.info((":material/Check: Nenhuma Exame vencendo nos próximos 90 dias."))
+            else:
+                st.write(vencimento_toxicologico.style.format({"Validade Exame Toxicologico": "{:%d/%m/%Y}"}))
+ 
     with tabs[2]:
 
-        st.markdown("# Aniversariantes")
+        mes_anv_selecionado = st.select_slider("Selecione o mês: ",range(1,13),value=HOJE_MES)
+        niver_vida,niver_empresa,niver_grafico = trata_df_aniv(df_aniversario, mes_anv_selecionado)
+
+        st.markdown(f"# :blue[{len(niver_vida)+len(niver_empresa)} |] Aniversariantes :blue[{datetime(HOJE_ANO,mes_anv_selecionado,1).strftime("%B").title()}]")
     
 
         c1, c2 = st.columns(2)
         
-        c1.markdown("### Aniversário Nascimento")
+        c1.markdown(f"### Aniversário Nascimento :blue[| {len(niver_vida)}]")
         c1.dataframe(niver_vida)
-        c2.markdown("### Aniversário Empresa")
+        c2.markdown(f"### Aniversário Empresa :blue[| {len(niver_empresa)}]")
         c2.dataframe(niver_empresa)
 
 
@@ -495,31 +546,7 @@ if arquivos_carregados:
             st.subheader("Dados Consolidados")
             st.dataframe(metrics['df_mensal'].set_index("Mês"), width="stretch")
                 
-    st.divider()
-    st.markdown("# Erros e Avisos")
-    if not df_exp_vencido.empty:
-        st.warning(f":material/Do_Not_Disturb_On: {len(df_exp_vencido)} Experiências Vencidas")
-    if not vencimento_90.empty:
-        st.error(f":material/Id_Card: {len(vencimento_90)} CNHs vencendo em breve")
-    if df_exp_vencido.empty and vencimento_90.empty:
-        st.success(":material/Check: Nenhum alerta crítico pendente")
-    if not df_info_vazio.empty:
-        st.error(f"{len(df_info_vazio)} Linhas Vazias")
-        with st.expander(":material/Do_Not_Disturb_On: Verificar linhas vazias"):
-            col_vazio = df_info_vazio.columns
-            for col in col_vazio:
-                lin_vazia = df_info_vazio[df_info_vazio[col].isna()]
-                if not lin_vazia.empty:
-                    st.write(f"Linha vazia em: {col}")
-                    lin_vazia[["EMPRESA",col]]
 
-
-        if not erro_ativo.empty:
-            st.write(erro_ativo)
-        if not vazio_dt.empty:
-            st.error(f" {len(vazio_dt)} Datas não preenchidas")
-            with st.expander(":material/Do_Not_Disturb_On: Verificar Datas Vazias"):
-                st.write(vazio_dt)
 else:
     st.info("Aguardando upload do arquivo para gerar os indicadores.")
     
