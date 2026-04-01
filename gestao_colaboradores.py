@@ -1,22 +1,10 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from datetime import datetime
 import plotly.express as px
-import plotly.graph_objects as go
-import requests
-import re
-import locale
-
+from babel.dates import format_datetime
 
 st.set_page_config(page_title="Colaboradores Ativos", layout="wide")
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
-    except locale.Error:
-        pass
 if False:   #   Posteriormente usar login
     if "user" not in st.session_state:
         st.session_state.user = None
@@ -26,8 +14,6 @@ if False:   #   Posteriormente usar login
         st.markdown("Realize login")
         st.stop()
 
-
-
 HOJE = datetime.now()
 HOJE_DATA = pd.to_datetime(HOJE.date())
 HOJE_MES = HOJE_DATA.month
@@ -35,49 +21,15 @@ HOJE_ANO =HOJE_DATA.year
 ULTIMO_DIA_ANO = pd.to_datetime(f'{HOJE_DATA.year}-12-31')
 
 link_arquivo = False
-#link_arquivo = st.secrets["onedrive"]["bd_excel"]
-
-@st.cache_data(ttl=7200, show_spinner=True, scope="session")
-def carregar_dados_onedrive(input_texto):
-    with st.spinner("Pegando Arquivos Automaticamente...",show_time=True):
-        try:
-            # 1. Limpeza: Se o usuário colou o <iframe>, extrai apenas a URL
-            url_match = re.search(r'src="([^"]+)"', input_texto)
-            url = url_match.group(1) if url_match else input_texto
-            
-            # 2. Ajuste para SharePoint Business
-            # Se for link de embed do SharePoint, mudamos para o modo de download
-            if "sharepoint.com" in url:
-
-                if "embed.aspx" in url:
-                    # Transforma o link de embed em um link de ação de download
-                    url = url.replace("embed.aspx", "download.aspx")
-                elif "download=1" not in url:
-                    # Se for link de compartilhamento normal, força o download
-                    url = url + ("&" if "?" in url else "?") + "download=1"
-            else:
-                # Caso seja OneDrive Pessoal
-                url = url.replace("embed", "download")
-
-            # 3. Faz a requisição
-            response = requests.get(url, timeout=20)
-            response.raise_for_status()
-            
-            return response.text
-        except Exception as e:
-            st.error(f"Erro ao processar URL: {e}")
-            return None
-
 
 def importa_valida(df):
     df = df.drop(columns=["MesAdm","AnoAdm","AnosEmpresa","Tativo","MesDeslig","AnoDeslig","Exp 45 dias","Exp 90 dias", "Prazo EXP","MesAnv"])
 
-
-
-    df_ativos = df[df["Status"].isin(["ATIVO","INSS"])]
-    df_exp = df[df["Status"]=="EXPERIENCIA"]
+    df_ativos = df[df["Status"].isin(["ATIVO","INSS"])].copy()
+    df_exp = df[df["Status"]=="EXPERIENCIA"].copy()
     df_CNH = df[df["Status"]!="DESLIGADO"].dropna(subset=["Validade de CNH"]).copy()
-    df_aniversario = df_ativos[["Colaborador","EMPRESA","Admissão","Status","Data de Nascimento"]]
+    df_aniversario = df[df["Status"]!="DESLIGADO"].copy()
+    df_aniversario = df_aniversario[["Colaborador","EMPRESA","Admissão","Status","Data de Nascimento"]]
 
     df_validacao_ativo = df[df["Status"]!="DESLIGADO"]
     erro_ativo = df_ativos[df_ativos["Desligamento"]== "Nat"]
@@ -113,9 +65,9 @@ def importa_valida(df):
     st.divider()
     return df,df_ativos, df_exp, df_CNH, df_aniversario, df_info_vazio, vazio_dt, validacao_toxicologico, erro_ativo
 
-
 def trata_df_exp(df_exp):
-    df_exp = df_exp[['Colaborador', 'Cargo', 'EMPRESA', 'Admissão', 'Desligamento', 'Salário Atual', 'Telefone para Contato', 'Sexo', 'Tem Filhos']]
+    df_exp = df_exp[['Colaborador', 'Cargo', 'EMPRESA', 'Admissão', 'Desligamento', 'Salário Atual', 'Telefone para Contato', 'Sexo', 'Tem Filhos']].copy()
+    df_exp['Vence_30d'] = df_exp['Admissão'] + pd.Timedelta(days=30)
     df_exp['Vence_30d'] = df_exp['Admissão'] + pd.Timedelta(days=30)
     df_exp['Vence_90d'] = df_exp['Admissão'] + pd.Timedelta(days=90)
 
@@ -162,44 +114,41 @@ def trata_df_aniv(df_aniversario,mes_aniversario):
     df_aniversario['Mês de Nascimento'] = df_aniversario['Data de Nascimento'].dt.month
     df_aniversario['Mês de Admissão'] = df_aniversario['Admissão'].dt.month
     
-
-
     niver_vida = df_aniversario[df_aniversario['Data de Nascimento'].dt.month == mes_aniversario].copy()
     niver_vida['Dia'] = niver_vida['Data de Nascimento'].dt.day
+
+    anv_nascimento = df_aniversario['Mês de Nascimento'].value_counts().sort_index().reindex(range(1, 13), fill_value=0)
+    
+    df_aniversario = df_aniversario[df_aniversario["Status"]=="ATIVO"]
 
     niver_empresa = df_aniversario[df_aniversario['Admissão'].dt.month == mes_aniversario].copy()
     niver_empresa['Anos de Casa'] = HOJE_ANO - niver_empresa['Admissão'].dt.year
     niver_empresa['Dia'] = niver_empresa['Admissão'].dt.day
-
     niver_empresa = niver_empresa[niver_empresa['Anos de Casa'] > 0]
 
-    anv_nascimento = df_aniversario['Mês de Nascimento'].value_counts().sort_index().reindex(range(1, 13), fill_value=0)
     anv_empresa = df_aniversario['Mês de Admissão'].value_counts().sort_index().reindex(range(1, 13), fill_value=0)
 
     df_plot = pd.DataFrame({
-        'Mês': range(1, 13),
+        'Mês': [datetime(HOJE_ANO,x,1) for x in range(1,13)],
         'Aniv. Nascimento': anv_nascimento.values,
         'Aniv. Empresa': anv_empresa.values
     }).melt(id_vars='Mês', var_name='Tipo', value_name='Quantidade')
-
-    meses_nome = {1:'Jan', 2:'Fev', 3:'Mar', 4:'Abr', 5:'Mai', 6:'Jun', 7:'Jul', 8:'Ago', 9:'Set', 10:'Out', 11:'Nov', 12:'Dez'}
-    df_plot['Mês Nome'] = df_plot['Mês'].map(meses_nome)
+    df_plot['Mês Nome'] = df_plot['Mês'].map(lambda x: format_datetime(x,"MMM/yyyy",locale="pt_BR").replace(".","").title())
 
     fig = px.bar(df_plot, 
                 x='Mês Nome', 
                 y='Quantidade', 
                 color='Tipo',
-                barmode='group',  # Este comando coloca as barras lado a lado
+                barmode='group',
                 title='Comparativo Mensal: Nascimento vs. Empresa',
                 color_discrete_map={'Aniv. Nascimento': '#004777', 'Aniv. Empresa': '#E40039'},
-                category_orders={"Mês Nome": list(meses_nome.values())},
-                text_auto=True) # Adiciona os números em cima das barras
+                text_auto=True,
+                ) 
 
     fig.update_layout(
         xaxis_title="Meses",
         yaxis_title="Total de Colaboradores",
         legend_title="Categoria",
-        plot_bgcolor='rgba(0,0,0,0)' # Fundo limpo
     )
 
     niver_vida = niver_vida [["Colaborador", "EMPRESA","Status","Dia"]].set_index("Colaborador")
@@ -232,7 +181,7 @@ def trata_turn_over(df):
             taxa_turnover = round(((entradas + saidas) / 2) / ativos * 100, 2)
             
         historico.append({
-            'Mês': mes.strftime('%b/%Y'),
+            'Mês': format_datetime(mes,"MMM/yyyy",locale="pt_BR").replace(".","").title(),
             'Ativos': ativos,
             'Entradas': entradas,
             'Saídas': saidas,
@@ -241,9 +190,8 @@ def trata_turn_over(df):
 
     df_metrics = pd.DataFrame(historico)
     
-    turnover_por_cargo = df[df['Status'] == 'DESLIGADO'].groupby('Cargo').size().reset_index(name='Total Desligamentos')
+    turnover_por_cargo = df[df['Status'] == 'DESLIGADO'].groupby(['Cargo_Geral',"Nivel"]).size().reset_index(name='Total Desligamentos')
     
-
     return {
         "df_mensal": df_metrics,
         "turnover_cargo": turnover_por_cargo.sort_values(by='Total Desligamentos', ascending=False),
@@ -252,6 +200,8 @@ def trata_turn_over(df):
 
 def processar_faixa_etaria(df):
     # Calcular a idade
+    # df["Idade"] = df["Data de Nascimento"]
+    # df['Idade'] = df['Data de Nascimento'].apply(
     df['Idade'] = df['Data de Nascimento'].apply(
         lambda x: HOJE_ANO - x.year - ((HOJE_MES, HOJE.day) < (x.month, x.day))
     )
@@ -259,7 +209,7 @@ def processar_faixa_etaria(df):
     # Definir os cortes e os nomes das faixas
     bins = [0, 18, 25, 35, 45, 60, 100]
     labels = ['Até 18 anos', '19-25 anos', '26-35 anos', '36-45 anos', '46-60 anos', 'Mais de 60']
-    df['Faixa Etária'] = pd.cut(df['Idade'], bins=bins, labels=labels, right=False)
+    df['Faixa Etária'] = pd.cut(df['Idade'], bins=bins, labels=labels, right=False).copy()
 
     df['Faixa Etária'] = pd.Categorical(
     df['Faixa Etária'], 
@@ -368,10 +318,10 @@ if arquivos_carregados:
             values='Qt Colaboradores',
             names='EMPRESA',
             hole=0.6,
-            color_discrete_sequence=px.colors.qualitative.Pastel)
+            color_discrete_sequence=px.colors.qualitative.Prism)
         df_cont_empresa = df_cont_empresa.set_index("EMPRESA")
         
-        df_cont_genero = df_ativos.groupby(["EMPRESA","Sexo"]).size().reset_index(name="Total")        
+        df_cont_genero = df_ativos.groupby(["EMPRESA","Sexo"]).size().reset_index(name="Total")
         fig_cont_genero = px.bar(
             df_cont_genero,
             x ="Total",
@@ -379,12 +329,8 @@ if arquivos_carregados:
             color="Sexo",
             barmode="group",
             text_auto=True,
-            #title="",
-            #color_discrete_map={'M': '#004777', 'F': '#E40039'}, # Azul para M, Vermelho/Rosa para F
-            color_discrete_map={'MASCULINO': '#004777', 'FEMININO': '#E40039'},
-
-            #debbug
-            
+            title="Colaborador por Gênero",
+            color_discrete_map={'MASCULINO': '#004777', 'FEMININO': '#E40039'},            
             labels={'EMPRESA': 'Unidade/Empresa', 'count': 'Total de Pessoas', 'Sexo': 'Gênero'}
         )
         fig_cont_genero.update_layout(
@@ -392,7 +338,7 @@ if arquivos_carregados:
         )
 
         st.markdown("# Colaboradores")
-        col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+        col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
         col_kpi1.metric("Colaboradores Ativos", len(df_ativos))
         col_kpi2.metric("Contratos em Exp.", len(df_exp))
         col_kpi3.metric("Motoristas", len(df_CNH))
@@ -435,16 +381,14 @@ if arquivos_carregados:
 
         with col2:
             st.subheader("Percentual por Gênero/Sexo")
-            # Gráfico de Pizza para complementar a análise demográfica
             fig_pie = px.pie(
                 df_idade, 
                 names='Sexo', 
                 hole=0.4,
-                color_discrete_sequence=px.colors.qualitative.Pastel
+                color="Sexo",
+                color_discrete_map={"MASCULINO": "#004777","FEMININO": "#E40039"}
             )
             st.plotly_chart(fig_pie, width="stretch")
-
-
 
     with tabs[1]:
         st.markdown("# Experiência")
@@ -509,14 +453,15 @@ if arquivos_carregados:
         mes_anv_selecionado = st.select_slider("Selecione o mês: ",range(1,13),value=HOJE_MES)
         niver_vida,niver_empresa,niver_grafico = trata_df_aniv(df_aniversario, mes_anv_selecionado)
 
-        st.markdown(f"# :blue[{len(niver_vida)+len(niver_empresa)} |] Aniversariantes :blue[{datetime(HOJE_ANO,mes_anv_selecionado,1).strftime("%B").title()}]")
-    
+        mes_selecionado_formatado = format_datetime(datetime(HOJE_ANO,mes_anv_selecionado,1),format="MMMM",locale="pt_BR")
+
+        st.markdown(f"# :blue[{len(niver_vida)+len(niver_empresa)} |] Aniversariantes :blue[{mes_selecionado_formatado.title()}]")
 
         c1, c2 = st.columns(2)
         
-        c1.markdown(f"### Aniversário Nascimento :blue[| {len(niver_vida)}]")
+        c1.markdown(f"### :blue[{len(niver_vida)} |] Aniversário Nascimento")
         c1.dataframe(niver_vida)
-        c2.markdown(f"### Aniversário Empresa :blue[| {len(niver_empresa)}]")
+        c2.markdown(f"### :blue[{len(niver_empresa)} |] Aniversário Empresa")
         c2.dataframe(niver_empresa)
 
 
@@ -532,26 +477,43 @@ if arquivos_carregados:
         # Gráfico de Evolução Mensal
         st.subheader("Evolução de Entradas vs Saídas")
         fig_evolucao = px.line(
-            metrics['df_mensal'], x='Mês', y=['Entradas', 'Saídas'], 
+            metrics['df_mensal'],
+            x='Mês',
+            y=['Entradas', 'Saídas'], 
             markers=True,
-            color_discrete_sequence=['#2ecc71', '#e74c3c'])
+            color_discrete_map={"Entradas":'#2ecc71',"Saídas":'#e74c3c'},
+            text="value",
+            )
+        fig_evolucao.for_each_trace(
+            lambda t: t.update(
+                textfont_color=t.line.color,
+                textposition="top center",
+            )
+        )
         
         st.plotly_chart(fig_evolucao, width="stretch")
 
-        # Visão por Cargo e Tabela Detalhada
         c1, c2 = st.columns(2)
-
         with c1:
-            st.subheader("Desligamentos por Cargo - TOP10")
-            fig_cargo = px.bar(metrics['turnover_cargo'].head(10), x='Total Desligamentos', y='Cargo', 
-                            orientation='h', color_discrete_sequence=['#004777'])
+            st.subheader("Desligamentos por Cargo")
+            
+            qtd_cargo = len(metrics["turnover_cargo"])
+            num_cargos = st.slider("Quantidade de Cargos a Exibir",5,qtd_cargo,int(qtd_cargo/2))
+
+            fig_cargo = px.bar(
+                metrics['turnover_cargo'].head(num_cargos),
+                x='Total Desligamentos',
+                y='Cargo_Geral', 
+                color="Nivel",
+                orientation='h',
+                color_discrete_sequence=px.colors.qualitative.Prism,
+                text_auto=True,
+                )
+            fig_cargo.update_layout(height=400+(num_cargos*20))
             st.plotly_chart(fig_cargo, width="stretch")
 
         with c2:
             st.subheader("Dados Consolidados")
-            st.dataframe(metrics['df_mensal'].set_index("Mês"), width="stretch")
-                
-
+            st.dataframe(metrics['df_mensal'].set_index("Mês"), width="stretch")     
 else:
     st.info("Aguardando upload do arquivo para gerar os indicadores.")
-    

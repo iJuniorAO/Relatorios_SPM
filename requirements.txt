@@ -5,3 +5,4 @@ numpy
 xlrd
 supabase
 openpyxl
+babel
