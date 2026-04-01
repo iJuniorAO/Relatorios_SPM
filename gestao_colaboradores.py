@@ -299,96 +299,76 @@ if arquivos_carregados:
                 st.dataframe(vazio_dt.style.format({"Admissão":"{:%d/%m/%Y}","Data de Nascimento":"{:%d/%m/%Y}"},na_rep=""))
         st.divider()
 
-
-
-
-
-
-
     st.space("medium")
     tabs = st.tabs(["Visão Geral", "Prazos e Alertas", "Aniversariantes", "Turn-Over"])
 
-    with tabs[0]:
+    with tabs[3]:
+    
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Colaboradores Ativos", len(df_ativos))
+        col2.metric("Média Turnover (12m)", f"{metrics['media_turnover']}%")
+        col3.metric("Total de Saídas (Período)", metrics['df_mensal']['Saídas'].sum())
 
-        df_ativos = df_ativos.copy()
-
-        df_cont_empresa = df_ativos['EMPRESA'].value_counts().reset_index().rename(columns={"count":"Qt Colaboradores"})
-        fig_cont_empresa = px.pie(
-            df_cont_empresa,
-            values='Qt Colaboradores',
-            names='EMPRESA',
-            hole=0.6,
-            color_discrete_sequence=px.colors.qualitative.Prism)
-        df_cont_empresa = df_cont_empresa.set_index("EMPRESA")
-        
-        df_cont_genero = df_ativos.groupby(["EMPRESA","Sexo"]).size().reset_index(name="Total")
-        fig_cont_genero = px.bar(
-            df_cont_genero,
-            x ="Total",
-            y="EMPRESA", 
-            color="Sexo",
-            barmode="group",
-            text_auto=True,
-            title="Colaborador por Gênero",
-            color_discrete_map={'MASCULINO': '#004777', 'FEMININO': '#E40039'},            
-            labels={'EMPRESA': 'Unidade/Empresa', 'count': 'Total de Pessoas', 'Sexo': 'Gênero'}
+        # Gráfico de Evolução Mensal
+        st.subheader("Evolução de Entradas vs Saídas")
+        fig_evolucao = px.line(
+            metrics['df_mensal'],
+            x='Mês',
+            y=['Entradas', 'Saídas'], 
+            markers=True,
+            color_discrete_map={"Entradas":'#2ecc71',"Saídas":'#e74c3c'},
+            text="value",
+            )
+        fig_evolucao.for_each_trace(
+            lambda t: t.update(
+                textfont_color=t.line.color,
+                textposition="top center",
+            )
         )
-        fig_cont_genero.update_layout(
-            yaxis={'categoryorder':'total ascending'}
-        )
-
-        st.markdown("# Colaboradores")
-        col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-        col_kpi1.metric("Colaboradores Ativos", len(df_ativos))
-        col_kpi2.metric("Contratos em Exp.", len(df_exp))
-        col_kpi3.metric("Motoristas", len(df_CNH))
-        #col_kpi4.metric("Aniversariantes do Mês", len(niver_vida)+len(niver_empresa))
-
-        st.divider()
         
+        st.plotly_chart(fig_evolucao, width="stretch")
+
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown("### Distribuição por Empresa")
-            st.dataframe(df_cont_empresa)
-            st.space("large")
-
+            st.subheader("Desligamentos por Cargo")
             
-        with c2:
-            st.plotly_chart(fig_cont_empresa, width="content")
+            qtd_cargo = len(metrics["turnover_cargo"])
+            num_cargos = st.slider("Quantidade de Cargos a Exibir",5,qtd_cargo,int(qtd_cargo/2))
 
-        st.markdown("### Colaboradores por Gênero")
-        st.plotly_chart(fig_cont_genero,width="stretch")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("Distribuição por Faixa Etária")
-
-            df_counts = df_idade['Faixa Etária'].value_counts(sort=False).reset_index()
-            df_counts.columns = ['Faixa Etária', 'Quantidade']
-            
-            fig_bar = px.bar(
-                df_counts, 
-                x='Faixa Etária', 
-                y='Quantidade',
-                text='Quantidade',
-                color='Faixa Etária',
+            fig_cargo = px.bar(
+                metrics['turnover_cargo'].head(num_cargos),
+                x='Total Desligamentos',
+                y='Cargo_Geral', 
+                color="Nivel",
+                orientation='h',
                 color_discrete_sequence=px.colors.qualitative.Prism,
-                template="plotly_white"
-            )
-            fig_bar.update_traces(textposition='outside')
-            st.plotly_chart(fig_bar, width="stretch")
+                text_auto=True,
+                )
+            fig_cargo.update_layout(height=400+(num_cargos*20))
+            st.plotly_chart(fig_cargo, width="stretch")
 
-        with col2:
-            st.subheader("Percentual por Gênero/Sexo")
-            fig_pie = px.pie(
-                df_idade, 
-                names='Sexo', 
-                hole=0.4,
-                color="Sexo",
-                color_discrete_map={"MASCULINO": "#004777","FEMININO": "#E40039"}
-            )
-            st.plotly_chart(fig_pie, width="stretch")
+        with c2:
+            st.subheader("Dados Consolidados")
+            st.dataframe(metrics['df_mensal'].set_index("Mês"), width="stretch")     
+
+    with tabs[2]:
+
+        mes_anv_selecionado = st.select_slider("Selecione o mês: ",range(1,13),value=HOJE_MES)
+        niver_vida,niver_empresa,niver_grafico = trata_df_aniv(df_aniversario, mes_anv_selecionado)
+
+        mes_selecionado_formatado = format_datetime(datetime(HOJE_ANO,mes_anv_selecionado,1),format="MMMM",locale="pt_BR")
+
+        st.markdown(f"# :blue[{len(niver_vida)+len(niver_empresa)} |] Aniversariantes :blue[{mes_selecionado_formatado.title()}]")
+
+        c1, c2 = st.columns(2)
+        
+        c1.markdown(f"### :blue[{len(niver_vida)} |] Aniversário Nascimento")
+        c1.dataframe(niver_vida)
+        c2.markdown(f"### :blue[{len(niver_empresa)} |] Aniversário Empresa")
+        c2.dataframe(niver_empresa)
+
+
+        st.plotly_chart(niver_grafico, width="stretch")
 
     with tabs[1]:
         st.markdown("# Experiência")
@@ -447,73 +427,89 @@ if arquivos_carregados:
                 st.info((":material/Check: Nenhuma Exame vencendo nos próximos 90 dias."))
             else:
                 st.write(vencimento_toxicologico.style.format({"Validade Exame Toxicologico": "{:%d/%m/%Y}"}))
- 
-    with tabs[2]:
 
-        mes_anv_selecionado = st.select_slider("Selecione o mês: ",range(1,13),value=HOJE_MES)
-        niver_vida,niver_empresa,niver_grafico = trata_df_aniv(df_aniversario, mes_anv_selecionado)
+    with tabs[0]:
 
-        mes_selecionado_formatado = format_datetime(datetime(HOJE_ANO,mes_anv_selecionado,1),format="MMMM",locale="pt_BR")
+        df_ativos = df_ativos.copy()
 
-        st.markdown(f"# :blue[{len(niver_vida)+len(niver_empresa)} |] Aniversariantes :blue[{mes_selecionado_formatado.title()}]")
-
-        c1, c2 = st.columns(2)
+        df_cont_empresa = df_ativos['EMPRESA'].value_counts().reset_index().rename(columns={"count":"Qt Colaboradores"})
+        fig_cont_empresa = px.pie(
+            df_cont_empresa,
+            values='Qt Colaboradores',
+            names='EMPRESA',
+            hole=0.6,
+            color_discrete_sequence=px.colors.qualitative.Prism)
+        df_cont_empresa = df_cont_empresa.set_index("EMPRESA")
         
-        c1.markdown(f"### :blue[{len(niver_vida)} |] Aniversário Nascimento")
-        c1.dataframe(niver_vida)
-        c2.markdown(f"### :blue[{len(niver_empresa)} |] Aniversário Empresa")
-        c2.dataframe(niver_empresa)
-
-
-        st.plotly_chart(niver_grafico, width="stretch")
-
-    with tabs[3]:
-    
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Colaboradores Ativos", len(df_ativos))
-        col2.metric("Média Turnover (12m)", f"{metrics['media_turnover']}%")
-        col3.metric("Total de Saídas (Período)", metrics['df_mensal']['Saídas'].sum())
-
-        # Gráfico de Evolução Mensal
-        st.subheader("Evolução de Entradas vs Saídas")
-        fig_evolucao = px.line(
-            metrics['df_mensal'],
-            x='Mês',
-            y=['Entradas', 'Saídas'], 
-            markers=True,
-            color_discrete_map={"Entradas":'#2ecc71',"Saídas":'#e74c3c'},
-            text="value",
-            )
-        fig_evolucao.for_each_trace(
-            lambda t: t.update(
-                textfont_color=t.line.color,
-                textposition="top center",
-            )
+        df_cont_genero = df_ativos.groupby(["EMPRESA","Sexo"]).size().reset_index(name="Total")
+        fig_cont_genero = px.bar(
+            df_cont_genero,
+            x ="Total",
+            y="EMPRESA", 
+            color="Sexo",
+            barmode="group",
+            text_auto=True,
+            title="Colaborador por Gênero",
+            color_discrete_map={'MASCULINO': '#004777', 'FEMININO': '#E40039'},            
+            labels={'EMPRESA': 'Unidade/Empresa', 'count': 'Total de Pessoas', 'Sexo': 'Gênero'}
         )
-        
-        st.plotly_chart(fig_evolucao, width="stretch")
+        fig_cont_genero.update_layout(
+            yaxis={'categoryorder':'total ascending'}
+        )
 
+        st.markdown("# Colaboradores")
+        col_kpi1, col_kpi2, col_kpi3, col_kpi4, col_kpi5 = st.columns(5)
+        col_kpi1.metric("Colaboradores Ativos", len(df_ativos))
+        col_kpi2.metric("Contratos em Exp.", len(df_exp))
+        col_kpi3.metric("Motoristas", len(df_CNH))
+        col_kpi4.metric("Aniversariantes do Mês", len(niver_vida)+len(niver_empresa))
+        col_kpi5.metric("Turn-Over (12m)    ", f"{metrics['media_turnover']}%")
+
+        st.divider()
+        
         c1, c2 = st.columns(2)
         with c1:
-            st.subheader("Desligamentos por Cargo")
+            st.markdown("### Distribuição por Empresa")
+            st.dataframe(df_cont_empresa)
+            st.space("large")
+
             
-            qtd_cargo = len(metrics["turnover_cargo"])
-            num_cargos = st.slider("Quantidade de Cargos a Exibir",5,qtd_cargo,int(qtd_cargo/2))
-
-            fig_cargo = px.bar(
-                metrics['turnover_cargo'].head(num_cargos),
-                x='Total Desligamentos',
-                y='Cargo_Geral', 
-                color="Nivel",
-                orientation='h',
-                color_discrete_sequence=px.colors.qualitative.Prism,
-                text_auto=True,
-                )
-            fig_cargo.update_layout(height=400+(num_cargos*20))
-            st.plotly_chart(fig_cargo, width="stretch")
-
         with c2:
-            st.subheader("Dados Consolidados")
-            st.dataframe(metrics['df_mensal'].set_index("Mês"), width="stretch")     
+            st.plotly_chart(fig_cont_empresa, width="content")
+
+        st.markdown("### Colaboradores por Gênero")
+        st.plotly_chart(fig_cont_genero,width="stretch")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Distribuição por Faixa Etária")
+
+            df_counts = df_idade['Faixa Etária'].value_counts(sort=False).reset_index()
+            df_counts.columns = ['Faixa Etária', 'Quantidade']
+            
+            fig_bar = px.bar(
+                df_counts, 
+                x='Faixa Etária', 
+                y='Quantidade',
+                text='Quantidade',
+                color='Faixa Etária',
+                color_discrete_sequence=px.colors.qualitative.Prism,
+                template="plotly_white"
+            )
+            fig_bar.update_traces(textposition='outside')
+            st.plotly_chart(fig_bar, width="stretch")
+
+        with col2:
+            st.subheader("Percentual por Gênero/Sexo")
+            fig_pie = px.pie(
+                df_idade, 
+                names='Sexo', 
+                hole=0.4,
+                color="Sexo",
+                color_discrete_map={"MASCULINO": "#004777","FEMININO": "#E40039"}
+            )
+            st.plotly_chart(fig_pie, width="stretch")
+ 
 else:
     st.info("Aguardando upload do arquivo para gerar os indicadores.")
