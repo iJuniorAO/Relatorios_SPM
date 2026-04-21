@@ -8,14 +8,17 @@ import numpy as np
 
 st.set_page_config(page_title="Graficos Diretoria", layout="wide")
 
-if False:      #    Posteriormente usar ferramente de login
-    if "user" not in st.session_state:
-        st.session_state.user = None
 
-    if st.session_state.user == None:
-        st.markdown("## :material/Close: Area Restrita")
-        st.markdown("Realize login")
-        st.stop()
+#   LOGIN
+if "user" not in st.session_state:
+    st.session_state.user = None
+    st.session_state.session = None
+
+if (st.session_state.user == None) or (st.session_state.perfil['status']!='ativo') or (st.session_state.perfil['role'] not in ['administrador', 'usuario']):
+    st.markdown("## :material/Close: Area Restrita")
+    if st.button('Realizar login'):
+        st.switch_page('login.py')
+    st.stop()
 
 def cria_df_consolidado(lista_arquivos):
     lista_df = []
@@ -70,6 +73,16 @@ META_MENSAL = 4_000_000
 st.title(":material/Chart_Data: Consolidador de Arquivos Excel")
 pegar_manual = st.toggle("Desejo pegar arquivos manualmente", value=True,disabled=True)
 st.markdown("Selecione os arquivos `.xls` ou `.xlsx` para unir as linhas em um único DataFrame.")
+
+perfil = st.session_state.perfil
+
+with st.sidebar:
+    if st.button("Sair do Sistema"):
+        st.session_state.user = None
+        st.rerun() 
+    st.markdown(f'# :blue[{perfil['nome']}]')
+    st.markdown(f"{perfil['role'].title()}")
+
 
 arquivos_carregados = st.file_uploader(
     "Escolha os arquivos Excel", 
@@ -227,20 +240,24 @@ if arquivos_carregados:
     faturamento_mes_atual = df_venda_mes_atual['Total'].sum()
 
 
+
     percentual_meta = (faturamento_mes_atual / META_MENSAL) * 100
     progresso_tempo = (dias_passados / dias_uteis_totais) * 100
     
-    meta_batida = percentual_meta>=progresso_tempo
     if dias_passados==dias_uteis_totais:
-        if meta_batida:
+        if percentual_meta>=progresso_tempo:
             status = "✔ Meta Batida"
         else:
             status = "❌ Meta Não foi Batida"
     else:
-        if meta_batida:
-            status = "Acima do Esperado"
+        if percentual_meta>=progresso_tempo+5:
+            status = "Excelente"
+        elif percentual_meta>progresso_tempo:
+            status = "Bom"
+        elif percentual_meta+3>progresso_tempo:
+            status = "Regular"
         else:
-            status = "Abaixo do Esperado"
+            status = "Ruim"
 
     # --- Visualização: Gráfico de Velocímetro (Gauge) ---
     fig_kpi = go.Figure(go.Indicator(
@@ -265,9 +282,9 @@ if arquivos_carregados:
             'borderwidth': 2,
             'bordercolor': "gray",
             'steps': [
-                {'range': [0, META_MENSAL * 0.5], 'color': "#ffcfcf"}, #ffcfcf
-                {'range': [META_MENSAL * 0.5, META_MENSAL * 0.8], 'color': '#fff3cf'},
-                {'range': [META_MENSAL * 0.8, META_MENSAL], 'color': '#d9ffcf'}
+                {'range': [0, META_MENSAL], 'color': "#ffcfcf"}, #ffcfcf
+                {'range': [META_MENSAL * 0.8, META_MENSAL], 'color': '#fff3cf'},
+                {'range': [META_MENSAL, META_MENSAL*1.5], 'color': '#d9ffcf'}
             ],
             'threshold': {
                 'line': {'color': "red", 'width': 4},
@@ -280,14 +297,17 @@ if arquivos_carregados:
     st.plotly_chart(fig_kpi, width="stretch")
 
     # --- Explicação Detalhada do KPI ---
-    col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+    col_kpi1, colKpi22, col_kpi2, col_kpi3, col_kpi4 = st.columns(5)
     col_kpi1.metric("Dias Úteis Decorridos", f"{dias_passados} de {dias_uteis_totais}")
+    colKpi22.metric("Dias Úteis Restantes", (dias_uteis_totais-dias_passados))
     col_kpi2.metric("Meta Atingida", f"{percentual_meta:.1f}%")
     col_kpi3.metric("Tempo Decorrido",f"{progresso_tempo:.1f}%")
     col_kpi4.metric("Status da Meta", status)
 
     if percentual_meta < progresso_tempo:
-        st.error(f"Atenção: Você já percorreu {progresso_tempo:.1f}% dos dias úteis, mas atingiu apenas {percentual_meta:.1f}% da meta.")
+        st.error(f"Atenção: Você já percorreu {progresso_tempo:.1f}% dos dias úteis, mas atingiu apenas {percentual_meta:.1f}% da meta. Restam apenas {dias_uteis_totais-dias_passados} dias")
+    elif(percentual_meta<progresso_tempo+5):
+        st.info(f"Aviso: Ritmo de Vendas {percentual_meta:.1f}% superior ao tempo decorrido {progresso_tempo:.1f}% da meta. Ainda restam {dias_uteis_totais-dias_passados} dias")
     else:
         st.success(f"Excelente! O ritmo de vendas ({percentual_meta:.1f}%) está superior ao tempo decorrido ({progresso_tempo:.1f}%).")
 
@@ -355,19 +375,6 @@ if arquivos_carregados:
         hovermode="x unified"
     )
     st.plotly_chart(fig_dia, width="stretch")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 else:
     st.info("Aguardando o upload de arquivos para iniciar...")
