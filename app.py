@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Relatóios MUMIX", layout="wide")
+st.set_page_config(page_title="Relatórios MUMIX", layout="wide")
 
 pages = {
     "Login":[
@@ -8,6 +8,7 @@ pages = {
     "Diretoria": [
         st.Page("pages/faturamento.py", title="Faturamento", icon=":material/universal_currency_alt:"),
         st.Page("pages/relatorio_cmv.py", title="CMV", icon=":material/bar_chart:"),
+        st.Page('pages/AR.py', title="Apresentação Resultado", icon=":material/area_chart:")
  
     ],
     "RH/DP": [
