@@ -1,10 +1,9 @@
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-def carregar_dados(caminho_arquivo):
+def carregar_dados(caminho_arquivo, colunas=None):
     """Lê o Excel e define os nomes das colunas conforme o notebook"""
-    colunas = ["Chamada", "Nome", "Dt Ult. Movim", "Qt Estoque", 
-               "Qt Venda", "Vl Financ.", "CMV", "Margem (%)"]
+    
     try:
         df = pd.read_excel(caminho_arquivo, header=None, names=colunas)
         return {"erro":False, "df":df}

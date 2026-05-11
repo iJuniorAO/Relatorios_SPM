@@ -8,7 +8,8 @@ pages = {
     "Diretoria": [
         st.Page("pages/faturamento.py", title="Faturamento", icon=":material/universal_currency_alt:"),
         st.Page("pages/relatorio_cmv.py", title="CMV", icon=":material/bar_chart:"),
-        st.Page('pages/AR.py', title="Apresentação Resultado", icon=":material/area_chart:")
+        st.Page('pages/AR.py', title="Apresentação Resultado", icon=":material/area_chart:"),
+        st.Page('pages/devolucoes.py', title="Devoluções Detalhado", icon=":material/stacked_line_chart:"),
  
     ],
     "RH/DP": [

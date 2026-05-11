@@ -3,6 +3,9 @@ from utils import carregar_dados, calcular_metricas, CMV_fig_TOPMargem, CMV_fig_
 
 st.set_page_config(page_title="Relatório CMV", layout="wide")
 
+COLUNAS_EXCEL = ["Chamada", "Nome", "Dt Ult. Movim", "Qt Estoque", 
+               "Qt Venda", "Vl Financ.", "CMV", "Margem (%)"]
+
 #   LOGIN
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -33,7 +36,7 @@ with st.sidebar:
     ignora_margem_ficticia = st.toggle("Deseja ignorar magem >90%?")
 if arquivo:
     # Chama as funções do arquivo de processamento
-    resposta = carregar_dados(arquivo)
+    resposta = carregar_dados(arquivo, COLUNAS_EXCEL)
 
     if resposta["erro"]:
         st.stop("Não foi possível carregar arquivo...")
