@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import numpy as np
 
 # Constants
@@ -38,6 +39,7 @@ COLUMNS_TO_DROP = ['Cód. Empresa', 'Emissão', 'Espécie', 'Eventos', 'Serie-Su
 # Negative categories for balance
 NEGATIVE_CATEGORIES = ['Bonificação Loja', 'Compra', 'Devolução Loja', 'Perda e Avaria', 'Uso e Consumo']
 BALANCE_COLUMNS_TO_REMOVE = ['Outros', 'Devolução Fornecedor']
+LOSS_COLUMNS_TO_REMOVE = ['Compra', 'Venda', 'Outras Entradas', 'Devolução Fornecedor', 'Outros']
 
 st.set_page_config(page_title="Graficos Diretoria", layout='wide')
 
@@ -87,8 +89,6 @@ def handle_pending_nfs(df):
     pending_nfs = df[df["Status"].isin(PENDING_STATUS)]
     
     if not pending_nfs.empty:
-        "erro "
-        st.divider()
         st.error(f":material/Close: [{len(pending_nfs)}] NFs Pendentes")
         with st.expander("Verificar NFs"):
             st.dataframe(pending_nfs)
@@ -165,6 +165,16 @@ def create_financial_balance_evolution(df, columns_to_remove):
         )
     )
 
+    fig.add_hline(
+            y=plot_df['Balanço'].mean(),
+            line_dash='dot',
+            line_color='red',
+            line_width=2,
+            annotation_text="Média",
+            annotation_position='bottom left',
+            annotation_font_color='red',
+        )
+
     fig.update_layout(
         xaxis_title="Mês/Ano",
         yaxis_title="Valor (R$)",
@@ -199,6 +209,9 @@ def create_revenue_chart(df):
             x=revenue_df['Referência'],
             y=revenue_df['Total'],
             text=revenue_df['Total'],
+            mode='lines+markers+text',
+            texttemplate='%{text:.2s}',
+            textposition='top center',
             fill='tozeroy',
             hovertemplate="<b>Mes/Ano:</b> %{x}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>",
         )
@@ -225,10 +238,10 @@ def create_revenue_chart(df):
     )
     return fig, revenue_df
 
-def create_losses_chart(df):
+def create_losses_chart(df, columns_to_remove):
 
     df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
-    losses_data = df[df['CategoriaFinanceira'] != 'Devolução Fornecedor'].groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
+    losses_data = df[~df['CategoriaFinanceira'].isin(columns_to_remove)].groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
 
     fig = go.Figure()
 
@@ -273,7 +286,63 @@ def create_losses_chart(df):
             ]
         )
     )
-    return fig, df
+    return fig, losses_data
+
+def process_store_returns(df, top_n=5):
+    """
+    Processa dados de devolução e retorna gráficos e dataframes resumidos.
+    
+    Retorna:
+    fig_valor, df_valor, fig_qtd, df_qtd
+    """
+    
+    # --- 1. PROCESSAMENTO PARA VALOR TOTAL ---
+    
+    top_lojas_valor = df.groupby('Cliente/Fornecedor')['Total'].sum().nlargest(top_n).index
+    
+    # Filtra e pivota para o gráfico
+    df_valor = df[df['Cliente/Fornecedor'].isin(top_lojas_valor)].pivot_table(
+        index='MesAno', 
+        columns='Cliente/Fornecedor', 
+        values='Total', 
+        aggfunc='sum'
+    ).fillna(0)
+
+    # --- 2. PROCESSAMENTO PARA QUANTIDADE DE NF ---
+    top_lojas_qtd = df.groupby('Cliente/Fornecedor')['Total'].count().nlargest(top_n).index
+    
+    # Filtra e pivota para o gráfico
+    df_qtd = df[df['Cliente/Fornecedor'].isin(top_lojas_qtd)].pivot_table(
+        index='MesAno', 
+        columns='Cliente/Fornecedor', 
+        values='Total', 
+        aggfunc='count'
+    ).fillna(0)
+
+    # --- 3. CRIAÇÃO DAS FIGURAS (Plotly GO) ---
+    def gerar_barras(df_pivoted, label_y):
+        fig = go.Figure()
+        for loja in df_pivoted.columns:
+            fig.add_trace(go.Bar(
+                x=df_pivoted.index,
+                y=df_pivoted[loja],
+                name=str(loja)
+            ))
+        fig.update_layout(
+            xaxis=dict(title='Mês/Ano', tickformat='%m/%Y', dtick='M1'),
+            yaxis_title=label_y,
+            barmode='group',
+            hovermode='x unified',
+            template='plotly_white'
+        )
+        return fig
+
+
+    fig_valor = gerar_barras(df_valor, 'Valor (R$)')
+    fig_qtd = gerar_barras(df_qtd, 'Qtd de Devoluções')
+
+    return fig_valor, df_valor, fig_qtd, df_qtd
+
 
 st.markdown("# :material/Chart_Data: Apresentação de Resultados")
 pegar_manual = st.toggle("Desejo pegar arquivos manualmente", value=True, disabled=True)
@@ -320,35 +389,79 @@ fig_Faturamento, df_Faturamento = create_revenue_chart(df_venda)
 st.plotly_chart(fig_Faturamento, width="stretch")
 
 st.divider()
-st.markdown("# Evolução Balanço Financeiro")
+st.markdown("# Evolução Balanço Mensal")
 
-columns_to_remove = BALANCE_COLUMNS_TO_REMOVE
-fig_BalancoFInanceiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df, columns_to_remove)
+balance_columns_to_remove = BALANCE_COLUMNS_TO_REMOVE
+fig_BalancoFInanceiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df, balance_columns_to_remove)
 
 st.plotly_chart(fig_BalancoFInanceiro, width='stretch')
 with st.expander(":material/Settings: Detalhes"):
-    st.markdown(f'### {len(columns_to_remove)} Colunas Ignoradas:')
-    for col in columns_to_remove:
+    st.markdown(f'### {len(balance_columns_to_remove)} Colunas Ignoradas:')
+    for col in balance_columns_to_remove:
         st.write(col)
     st.markdown('### Gráfico em Tabela:')
     st.dataframe(
-        df_EvolucaoFinanceiro.style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        width='stretch'
+        df_EvolucaoFinanceiro
+            .sort_index(ascending=False)
+            .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
+        column_config={
+            '_index':st.column_config.DatetimeColumn('MesAno', format="MM/YYYY")
+        },
+        width='stretch',
     )
 st.divider()
 
-fig_losses, df_saida = create_losses_chart(df_saida)
 
-st.markdown('# Perdas')
+fig_losses, df_losses = create_losses_chart(df,LOSS_COLUMNS_TO_REMOVE)
+
+st.markdown('# Perdas Gerais')
 st.plotly_chart(fig_losses, width='stretch')
 
 with st.expander(":material/Settings: Detalhes"):
-    st.dataframe(df_saida)
+    st.dataframe(
+    df_losses
+    .sort_index(ascending=False)
+    .style.format({
+        'Total': 'R$ {:.,2f}'.replace(',','x').replace('.',',').replace('x','.'),
+        'Referência': lambda x: x.strftime('%m/%Y')
+    })    
+)
+st.divider()
 
-df_devolucao_loja = df_entrada[df_entrada["CategoriaFinanceira"]=="Devolução Loja"]
+
+st.markdown('# Devolução Lojas')
 
 
+df_store_return = df[df['CategoriaFinanceira']=='Devolução Loja']
+number = st.number_input(
+    "Digite Quantas lojas devem Mostrar:", value=5, placeholder="Insira um número..."
+)
+fig_ranking_valor, df_ranking_valor, fig_ranking_qtd, df_ranking_qtd = process_store_returns(df_store_return,number)
 
+st.markdown(f'## TOP :blue[{number}] Maiores Valor Devolvido')
+st.plotly_chart(fig_ranking_valor, width='stretch')
+with st.expander(":material/Settings: Detalhes"):
+    st.dataframe(
+        df_ranking_valor
+            .sort_index(ascending=False)
+            .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
+        column_config={
+            '_index':st.column_config.DatetimeColumn('MesAno', format="MM/YYYY")
+        },
+        width='stretch',
+    ) 
+st.divider()
 
-
+st.markdown(f'## TOP :blue[{number}] Maiores Qt Devolvida')
+st.plotly_chart(fig_ranking_qtd, width='stretch')
+with st.expander(":material/Settings: Detalhes"):
+    st.dataframe(
+        df_ranking_qtd
+            .sort_index(ascending=False),
+        column_config={
+            '_index':st.column_config.DatetimeColumn('MesAno', format="MM/YYYY")
+        },
+        width='stretch',
+    ) 
+st.divider()
 
