@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import numpy as np
 
 # Constants
@@ -10,6 +9,7 @@ COMPANY_CODE = 10
 PENDING_STATUS = ["NF Pendente"]
 OPERATION_TYPES = ['Compra', 'Venda', 'Entrada', 'Saída']
 VALID_STATUSES = ["NFe", "NFCe"]
+COLUNAS_EXPORT = ["Hora", "Status da Nfe", "NFC-e", "Status da NFC-e", "Status Evento de NFC-e", "Usuário", "MesAno", "Mes_Ref", "Ano_Ref", "Mes_Ano"]
 
 FINANCIAL_CONDITIONS = [
     lambda df: df['Operação (Tipo)'].str.contains('Compra', case=False, na=False),
@@ -39,7 +39,6 @@ COLUMNS_TO_DROP = ['Cód. Empresa', 'Emissão', 'Espécie', 'Eventos', 'Serie-Su
 # Negative categories for balance
 NEGATIVE_CATEGORIES = ['Bonificação Loja', 'Compra', 'Devolução Loja', 'Perda e Avaria', 'Uso e Consumo']
 BALANCE_COLUMNS_TO_REMOVE = ['Outros', 'Devolução Fornecedor']
-LOSS_COLUMNS_TO_REMOVE = ['Compra', 'Venda', 'Outras Entradas', 'Devolução Fornecedor', 'Outros']
 
 st.set_page_config(page_title="Graficos Diretoria", layout='wide')
 
@@ -55,8 +54,6 @@ def check_authentication():
         if st.button('Realizar login'):
             st.switch_page('login.py')
         st.stop()
-
-check_authentication()
 
 def create_consolidated_dataframe(file_list):
     dataframes = []
@@ -74,58 +71,55 @@ def create_consolidated_dataframe(file_list):
     consolidated_df["Referência"] = pd.to_datetime(consolidated_df["Referência"], dayfirst=True, errors="coerce")
     return consolidated_df
 
-def validate_company_code(df):
-    """Validate that all records are for the correct company code."""
-    df_wrong_company = df[df["Cód. Empresa"] != COMPANY_CODE]
-    if not df_wrong_company.empty:
-        st.divider()
-        st.error(":material/Close: ERRO - Loja diferente da 010")
-        st.dataframe(df_wrong_company)
-        st.divider()
-        st.stop()
-
 def handle_pending_nfs(df):
     """Handle pending NFs by filtering them out and showing a warning."""
     pending_nfs = df[df["Status"].isin(PENDING_STATUS)]
     
     if not pending_nfs.empty:
+        st.divider()
         st.error(f":material/Close: [{len(pending_nfs)}] NFs Pendentes")
         with st.expander("Verificar NFs"):
             st.dataframe(pending_nfs)
         st.divider()
     return df
 
-def convert_data_types(df):
-    """Convert data types for specific columns."""
-    df["Número"] = pd.to_numeric(df["Número"], errors="raise")
-    df["Total"] = df["Total"].astype(str).str.replace(".", "").str.replace(",", ".")
-    df["Total"] = pd.to_numeric(df["Total"], errors="raise")
-    return df
-
-def add_date_columns(df):
-    """Add month and year columns for analysis."""
-    df['MesAno'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
-    df['Mes_Ref'] = df["Referência"].dt.month
-    df['Ano_Ref'] = df["Referência"].dt.year
-    df['Mes_Ano'] = df['Referência'].dt.strftime('%y/%b').str.upper()
-    return df
-
-def categorize_financial_operations(df):
-    conditions = [cond(df) for cond in FINANCIAL_CONDITIONS]
-    df['CategoriaFinanceira'] = np.select(conditions, FINANCIAL_CATEGORIES, default='Outros')
-    return df
-
-def filter_dataframes(df):
-    """Filter the dataframe into operation-specific dataframes."""
-    df_purchase = df[df["Operação (Tipo)"] == "Compra"]
-    df_sale = df[df["Operação (Tipo)"] == "Venda"]
-    df_sale = df_sale[df_sale["Status"].isin(VALID_STATUSES)]
-    df_entry = df[df["Operação (Tipo)"] == "Entrada"]
-    df_exit = df[df["Operação (Tipo)"] == "Saída"]
-    return df_purchase, df_sale, df_entry, df_exit
-
 def process_dataframe(df):
     """Process the consolidated dataframe: validate, clean, and categorize."""
+    def validate_company_code(df):
+        """Validate that all records are for the correct company code."""
+        df_wrong_company = df[df["Cód. Empresa"] != COMPANY_CODE]
+        if not df_wrong_company.empty:
+            st.divider()
+            st.error(":material/Close: ERRO - Loja diferente da 010")
+            st.dataframe(df_wrong_company)
+            st.divider()
+            st.stop()
+    def convert_data_types(df):
+        """Convert data types for specific columns."""
+        df["Número"] = pd.to_numeric(df["Número"], errors="raise")
+        df["Total"] = df["Total"].astype(str).str.replace(".", "").str.replace(",", ".")
+        df["Total"] = pd.to_numeric(df["Total"], errors="raise")
+        return df
+    def add_date_columns(df):
+        """Add month and year columns for analysis."""
+        df['MesAno'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
+        df['Mes_Ref'] = df["Referência"].dt.month
+        df['Ano_Ref'] = df["Referência"].dt.year
+        df['Mes_Ano'] = df['Referência'].dt.strftime('%y/%b').str.upper()
+        return df
+    def categorize_financial_operations(df):
+        conditions = [cond(df) for cond in FINANCIAL_CONDITIONS]
+        df['CategoriaFinanceira'] = np.select(conditions, FINANCIAL_CATEGORIES, default='Outros')
+        return df
+    def filter_dataframes(df):
+        """Filter the dataframe into operation-specific dataframes."""
+        df_purchase = df[df["Operação (Tipo)"] == "Compra"]
+        df_sale = df[df["Operação (Tipo)"] == "Venda"]
+        df_sale = df_sale[df_sale["Status"].isin(VALID_STATUSES)]
+        df_entry = df[df["Operação (Tipo)"] == "Entrada"]
+        df_exit = df[df["Operação (Tipo)"] == "Saída"]
+        return df_purchase, df_sale, df_entry, df_exit
+    
     validate_company_code(df)
     df = df.drop(columns=COLUMNS_TO_DROP)
     # df = handle_pending_nfs(df)
@@ -133,6 +127,57 @@ def process_dataframe(df):
     df = add_date_columns(df)
     df = categorize_financial_operations(df)
     return filter_dataframes(df) + (df,)
+
+def criar_balanco_devolucao(df):
+    grouped_df = df.groupby(["MesAno", "CategoriaFinanceira"])["Total"].sum().unstack()
+
+    grouped_df = grouped_df[["Devolução Fornecedor", "Devolução Loja"]]
+    grouped_df["Devolução Loja"] = -grouped_df["Devolução Loja"]
+    grouped_df["Balanço"] = grouped_df.sum(axis=1)
+
+    df_export = df[df["CategoriaFinanceira"].isin(["Devolução Fornecedor", "Devolução Loja"])]
+    df_export = df_export.drop(columns=COLUNAS_EXPORT)
+
+    plot_df = grouped_df.reset_index()
+
+
+    fig = go.Figure()
+
+    colors = ['#1f77b4' if x >= 0 else '#d62728' for x in plot_df['Balanço']]
+
+    fig.add_trace(
+        go.Bar(
+            x=plot_df['MesAno'],
+            y=plot_df['Balanço'],
+            text=plot_df['Balanço'],
+            texttemplate='%{y:.2s}',
+            textposition='outside',
+            marker_color=colors,
+            hovertemplate="<b>Mes/Ano:</b> %{x}<br><b>Balanço:</b> R$ %{y:,.2f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        xaxis_title="Mês/Ano",
+        yaxis_title="Valor (R$)",
+        template="plotly_white",
+        showlegend=False,
+        xaxis=dict(
+            tickformat="%m/%Y",
+            dtick="M1",
+        ),
+    )
+    fig.update_xaxes(
+        # rangeslider_visible=True,
+        rangeselector=dict(
+            buttons=[
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="1ano", step="year", stepmode="backward"),
+                dict(step="all")
+            ]
+        )
+    )
+
+    return fig, grouped_df, df_export
 
 def create_financial_balance_evolution(df, columns_to_remove):
     """Create a financial balance evolution chart."""
@@ -164,17 +209,6 @@ def create_financial_balance_evolution(df, columns_to_remove):
             hovertemplate="<b>Mes/Ano:</b> %{x}<br><b>Balanço:</b> R$ %{y:,.2f}<extra></extra>",
         )
     )
-
-    fig.add_hline(
-            y=plot_df['Balanço'].mean(),
-            line_dash='dot',
-            line_color='red',
-            line_width=2,
-            annotation_text="Média",
-            annotation_position='bottom left',
-            annotation_font_color='red',
-        )
-
     fig.update_layout(
         xaxis_title="Mês/Ano",
         yaxis_title="Valor (R$)",
@@ -196,12 +230,7 @@ def create_financial_balance_evolution(df, columns_to_remove):
 
 def create_revenue_chart(df):
     """Create a revenue evolution chart."""
-    # revenue_df = df.set_index('Referência').resample('ME')['Total'].sum().reset_index()
-    # revenue_df['Mês/Ano'] = revenue_df['Referência'].dt.strftime('%m/%Y')
-
-    df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
-    revenue_df = df[df['CategoriaFinanceira'] != 'Devolução Fornecedor'].groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
-
+    revenue_df = df[df["CategoriaFinanceira"]=="Venda"]
     fig = go.Figure()
 
     fig.add_trace(
@@ -216,7 +245,6 @@ def create_revenue_chart(df):
             hovertemplate="<b>Mes/Ano:</b> %{x}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>",
         )
     )
-
     fig.update_layout(
         xaxis_title="Referência",
         yaxis_title="Valor (R$)",
@@ -238,11 +266,12 @@ def create_revenue_chart(df):
     )
     return fig, revenue_df
 
-def create_losses_chart(df, columns_to_remove):
+def create_losses_chart(df):
 
     df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
-    losses_data = df[~df['CategoriaFinanceira'].isin(columns_to_remove)].groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
+    losses_data = df[df['CategoriaFinanceira'] != 'Devolução Fornecedor'].groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
 
+    'concat', losses_data
     fig = go.Figure()
 
     # Create a trace for each category
@@ -264,7 +293,6 @@ def create_losses_chart(df, columns_to_remove):
             textposition='top center',
             textfont=dict(color=color),
         ))
-
     fig.update_layout(
         title="Evolução Temporal das Perdas por Categoria",
         xaxis_title="Data de Referência",
@@ -288,74 +316,14 @@ def create_losses_chart(df, columns_to_remove):
     )
     return fig, losses_data
 
-def process_store_returns(df, top_n=5):
-    """
-    Processa dados de devolução e retorna gráficos e dataframes resumidos.
-    
-    Retorna:
-    fig_valor, df_valor, fig_qtd, df_qtd
-    """
-    
-    # --- 1. PROCESSAMENTO PARA VALOR TOTAL ---
-    
-    top_lojas_valor = df.groupby('Cliente/Fornecedor')['Total'].sum().nlargest(top_n).index
-    
-    # Filtra e pivota para o gráfico
-    df_valor = df[df['Cliente/Fornecedor'].isin(top_lojas_valor)].pivot_table(
-        index='MesAno', 
-        columns='Cliente/Fornecedor', 
-        values='Total', 
-        aggfunc='sum'
-    ).fillna(0)
-
-    # --- 2. PROCESSAMENTO PARA QUANTIDADE DE NF ---
-    top_lojas_qtd = df.groupby('Cliente/Fornecedor')['Total'].count().nlargest(top_n).index
-    
-    # Filtra e pivota para o gráfico
-    df_qtd = df[df['Cliente/Fornecedor'].isin(top_lojas_qtd)].pivot_table(
-        index='MesAno', 
-        columns='Cliente/Fornecedor', 
-        values='Total', 
-        aggfunc='count'
-    ).fillna(0)
-
-    # --- 3. CRIAÇÃO DAS FIGURAS (Plotly GO) ---
-    def gerar_barras(df_pivoted, label_y):
-        fig = go.Figure()
-        for loja in df_pivoted.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivoted.index,
-                y=df_pivoted[loja],
-                name=str(loja)
-            ))
-        fig.update_layout(
-            xaxis=dict(title='Mês/Ano', tickformat='%m/%Y', dtick='M1'),
-            yaxis_title=label_y,
-            barmode='group',
-            hovermode='x unified',
-            template='plotly_white'
-        )
-        return fig
-
-
-    fig_valor = gerar_barras(df_valor, 'Valor (R$)')
-    fig_qtd = gerar_barras(df_qtd, 'Qtd de Devoluções')
-
-    return fig_valor, df_valor, fig_qtd, df_qtd
-
 
 st.markdown("# :material/Chart_Data: Apresentação de Resultados")
 pegar_manual = st.toggle("Desejo pegar arquivos manualmente", value=True, disabled=True)
 st.markdown("Selecione os arquivos `.xls` ou `.xlsx` para unir as linhas em um único DataFrame.")
 
+check_authentication()
 perfil = st.session_state.perfil
 
-with st.sidebar:
-    if st.button("Sair do Sistema"):
-        st.session_state.user = None
-        st.rerun() 
-    st.markdown(f'# :blue[{perfil['nome']}]')
-    st.markdown(f"{perfil['role'].title()}")
 
 arquivos_carregados = st.file_uploader(
     "Escolha os arquivos Excel", 
@@ -371,6 +339,22 @@ if not arquivos_carregados:
 df = create_consolidated_dataframe(arquivos_carregados)
 handle_pending_nfs(df)
 
+with st.sidebar:
+    if st.button("Sair do Sistema"):
+        st.session_state.user = None
+        st.rerun() 
+    st.markdown(f'# :blue[{perfil['nome']}]')
+    st.markdown(f"{perfil['role'].title()}")
+    
+    # Download button for the dataframe
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Download DataFrame",
+        data=csv,
+        file_name='dataframe.csv',
+        mime='text/csv'
+    )
+
 st.markdown("# Filtro:")
 
 opcoes_status = df['Status'].unique().tolist()
@@ -385,83 +369,46 @@ df_compra, df_venda, df_entrada, df_saida, df = process_dataframe(df)
 
 st.markdown("# Faturamento")
 
-fig_Faturamento, df_Faturamento = create_revenue_chart(df_venda)
+df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
+df_grouped = df.groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
+
+# fig_Faturamento, df_Faturamento = create_revenue_chart(df_venda)
+fig_Faturamento, df_Faturamento = create_revenue_chart(df_grouped)
 st.plotly_chart(fig_Faturamento, width="stretch")
 
 st.divider()
-st.markdown("# Evolução Balanço Mensal")
+st.markdown("# Evolução Balanço Financeiro")
 
-balance_columns_to_remove = BALANCE_COLUMNS_TO_REMOVE
-fig_BalancoFInanceiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df, balance_columns_to_remove)
+columns_to_remove = BALANCE_COLUMNS_TO_REMOVE
+fig_BalancoFInanceiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df, columns_to_remove)
 
 st.plotly_chart(fig_BalancoFInanceiro, width='stretch')
 with st.expander(":material/Settings: Detalhes"):
-    st.markdown(f'### {len(balance_columns_to_remove)} Colunas Ignoradas:')
-    for col in balance_columns_to_remove:
+    st.markdown(f'### {len(columns_to_remove)} Colunas Ignoradas:')
+    for col in columns_to_remove:
         st.write(col)
     st.markdown('### Gráfico em Tabela:')
     st.dataframe(
-        df_EvolucaoFinanceiro
-            .sort_index(ascending=False)
-            .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        column_config={
-            '_index':st.column_config.DatetimeColumn('MesAno', format="MM/YYYY")
-        },
-        width='stretch',
+        df_EvolucaoFinanceiro.style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
+        width='stretch'
     )
 st.divider()
 
+fig_losses, df_output = create_losses_chart(df_saida)
 
-fig_losses, df_losses = create_losses_chart(df,LOSS_COLUMNS_TO_REMOVE)
-
-st.markdown('# Perdas Gerais')
+st.markdown('# Perdas')
 st.plotly_chart(fig_losses, width='stretch')
 
 with st.expander(":material/Settings: Detalhes"):
-    st.dataframe(
-    df_losses
-    .sort_index(ascending=False)
-    .style.format({
-        'Total': 'R$ {:.,2f}'.replace(',','x').replace('.',',').replace('x','.'),
-        'Referência': lambda x: x.strftime('%m/%Y')
-    })    
-)
-st.divider()
+    st.dataframe(df_output)
+
+df_devolucao_loja = df_entrada[df_entrada["CategoriaFinanceira"]=="Devolução Loja"]
 
 
-st.markdown('# Devolução Lojas')
+st.markdown('# Balanço Devolução')
+fig_balanco_dev, df_balanco_dev, df_balanco_dev_2 = criar_balanco_devolucao(df)
 
-
-df_store_return = df[df['CategoriaFinanceira']=='Devolução Loja']
-number = st.number_input(
-    "Digite Quantas lojas devem Mostrar:", value=5, placeholder="Insira um número..."
-)
-fig_ranking_valor, df_ranking_valor, fig_ranking_qtd, df_ranking_qtd = process_store_returns(df_store_return,number)
-
-st.markdown(f'## TOP :blue[{number}] Maiores Valor Devolvido')
-st.plotly_chart(fig_ranking_valor, width='stretch')
+st.plotly_chart(fig_balanco_dev, width='stretch')
 with st.expander(":material/Settings: Detalhes"):
-    st.dataframe(
-        df_ranking_valor
-            .sort_index(ascending=False)
-            .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        column_config={
-            '_index':st.column_config.DatetimeColumn('MesAno', format="MM/YYYY")
-        },
-        width='stretch',
-    ) 
-st.divider()
-
-st.markdown(f'## TOP :blue[{number}] Maiores Qt Devolvida')
-st.plotly_chart(fig_ranking_qtd, width='stretch')
-with st.expander(":material/Settings: Detalhes"):
-    st.dataframe(
-        df_ranking_qtd
-            .sort_index(ascending=False),
-        column_config={
-            '_index':st.column_config.DatetimeColumn('MesAno', format="MM/YYYY")
-        },
-        width='stretch',
-    ) 
-st.divider()
-
+    st.dataframe(df_balanco_dev)
+    st.dataframe(df_balanco_dev_2)
