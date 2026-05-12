@@ -1,4 +1,5 @@
 .streamlit/secrets.toml
 
 pages/__pycache__/
+.venv/
 *.pyc
