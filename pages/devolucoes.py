@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 # Configuração inicial da página
 st.set_page_config(page_title="Análise de Devoluções", layout="wide")
 
-# 2 gerais
+# 3 gerais
 def rel_geral_devolucao(df):
     """
     param: df
@@ -114,14 +114,57 @@ def rel_tipo_devolucao(df):
     )
     return fig, df_grouped
 
+def rel_valor_tipo_devolucao(df):
+    """
+    param: df
+
+    output: 1.Fig - x=%m/%Y y=Valor Total (R$)
+
+    """
+    df_temp = df.copy()
+    df_temp['MES_ANO'] = df_temp['DATA NF'].dt.strftime('%m/%Y')
+    
+    # Agrupamento dinâmico por soma de valor
+    df_grouped = df_temp.groupby(['MES_ANO', 'Imp/Qual'])['VALOR TOTAL'].sum().unstack(fill_value=0).reset_index()
+    
+    # Ordenação
+    df_grouped['sort_date'] = pd.to_datetime(df_grouped['MES_ANO'], format='%m/%Y')
+    df_grouped = df_grouped.sort_values('sort_date').drop(columns=['sort_date'])
+
+    fig = go.Figure()
+    for col in df_grouped.columns[1:]:
+        fig.add_trace(
+            go.Bar(
+                x=df_grouped['MES_ANO'],
+                y=df_grouped[col],
+                name=col,
+                text=df_grouped[col],
+                texttemplate='%{text:.2s}',
+                textposition='auto',
+                cliponaxis=False
+            )
+        )
+    
+    fig.update_layout(
+        barmode='stack',
+        title="Valor Tipo de Devolução (Imp/Qual) por Mês",
+        xaxis_title="Mês/Ano",
+        yaxis_title="Valor Total (R$)",
+    )
+    return fig, df_grouped
+
 # 2 motivos I
-def rel_valor_motivo_devolucao(df):
+def rel_valor_motivo_devolucao(df, remove_qualidade):
     """
     param: df
     
     output: fig x=%m/%Y, y='Valor/Tipo'
     """
     df_temp = df.copy()
+
+    if remove_qualidade:
+        df_temp = df_temp[df_temp["Imp/Qual"]!="Qualidade"]
+
     df_temp['MES_ANO'] = df_temp['DATA NF'].dt.strftime('%m/%Y')
 
     df_temp["MOTIVO"] = df_temp["MOTIVO DO PROBLEMA"].str.split()
@@ -140,15 +183,18 @@ def rel_valor_motivo_devolucao(df):
     for col in df_grouped.columns[1:]:
         fig.add_trace(go.Bar(x=df_grouped['MES_ANO'], y=df_grouped[col], name=col))
     
-    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês", xaxis_title="Mês/Ano")
+    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês (R$)", xaxis_title="Mês/Ano")
     return fig, df_grouped.set_index('MES_ANO')
 
-def rel_qt_motivo_devolucao(df):
+def rel_qt_motivo_devolucao(df, remove_qualidade):
     """
     param: df
     output: fig x=%m/%Y y=qtd/Motivo
     """
     df_temp = df.copy()
+
+    if remove_qualidade:
+        df_temp = df_temp[df_temp["Imp/Qual"]!="Qualidade"]
     df_temp['MES_ANO'] = df_temp['DATA NF'].dt.strftime('%m/%Y')
 
     df_temp["MOTIVO"] = df_temp["MOTIVO DO PROBLEMA"].str.split()
@@ -167,7 +213,7 @@ def rel_qt_motivo_devolucao(df):
     for col in df_grouped.columns[1:]:
         fig.add_trace(go.Bar(x=df_grouped['MES_ANO'], y=df_grouped[col], name=col))
     
-    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês", xaxis_title="Mês/Ano")
+    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês (qtd)", xaxis_title="Mês/Ano")
     return fig, df_grouped.set_index('MES_ANO')
 
 # 2 motivos II
@@ -190,7 +236,7 @@ def rel_valor_motivo_devolucao_II(df):
     for col in df_grouped.columns[1:]:
         fig.add_trace(go.Bar(x=df_grouped['MES_ANO'], y=df_grouped[col], name=col))
     
-    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês", xaxis_title="Mês/Ano")
+    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês (R$)", xaxis_title="Mês/Ano")
     return fig, df_grouped.set_index('MES_ANO')
 
 def rel_qt_motivo_devolucao_II(df):
@@ -217,7 +263,7 @@ def rel_qt_motivo_devolucao_II(df):
     for col in df_grouped.columns[1:]:
         fig.add_trace(go.Bar(x=df_grouped['MES_ANO'], y=df_grouped[col], name=col))
     
-    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês", xaxis_title="Mês/Ano")
+    fig.update_layout(barmode='stack', title="Motivo da Devolução por Mês (qtd)", xaxis_title="Mês/Ano")
     return fig, df_grouped.set_index('MES_ANO')
 
 # pendencia financeira
@@ -425,11 +471,9 @@ st.space()
 
 # --- SEÇÃO 1: RELATÓRIOS TOTAIS ---
 st.markdown("# Análise Geral")
-c1, c2 = st.columns(2)
-
-with c1:
-    fig_geral, df_geral = rel_geral_devolucao(df)
-    st.plotly_chart(fig_geral, width='stretch')
+fig_geral, df_geral = rel_geral_devolucao(df)
+st.plotly_chart(fig_geral, width='stretch')
+with st.expander(":material/visibility: Mostrar Tabela"):
     st.dataframe(
         df_geral
         .sort_values(by='MES_ANO',ascending=False)
@@ -438,50 +482,62 @@ with c1:
         }) 
         , width='stretch',hide_index=True)
 
+c1, c2 = st.columns(2)
+
+with c1:
+    fig_tipo_valor, df_tipo_valor = rel_valor_tipo_devolucao(df)
+    st.plotly_chart(fig_tipo_valor, width='stretch')
+    with st.expander(":material/visibility: Mostrar Tabela"):
+        st.dataframe(
+            df_tipo_valor
+            .sort_values(by='MES_ANO', ascending=False)
+            .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if isinstance(x, (int, float)) else x),
+            width='stretch', hide_index=True)
 with c2:
     fig_tipo, df_tipo = rel_tipo_devolucao(df)
     st.plotly_chart(fig_tipo, width='stretch')
-    st.dataframe(
-        df_tipo
-        .sort_values(by='MES_ANO',ascending=False)
-        ,width='stretch', hide_index=True)
+    with st.expander(":material/visibility: Mostrar Tabela"):
+        st.dataframe(
+            df_tipo
+            .sort_values(by='MES_ANO',ascending=False)
+            ,width='stretch', hide_index=True)
+
     
 st.divider()
 st.markdown("# Análise por Tipo")
+filtro_avaria = st.checkbox('Retirar Problema Qualidade')
 col1, col2 = st.columns(2)
 with col1:
-    st.markdown('### Valor (R$)')
-
-    fig_valor_devolucao, dev_valor_devolucao = rel_valor_motivo_devolucao(df)
+    fig_valor_devolucao, dev_valor_devolucao = rel_valor_motivo_devolucao(df, filtro_avaria)
     st.plotly_chart(fig_valor_devolucao, width='stretch')
-    st.dataframe(
-        dev_valor_devolucao
-        .sort_values(by='MES_ANO',ascending=False)
-        .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        width='stretch',
-        #  hide_index=True
-        )
+    with st.expander(":material/visibility: Mostrar Tabela"):
+        st.dataframe(
+            dev_valor_devolucao
+            .sort_values(by='MES_ANO',ascending=False)
+            .style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
+            width='stretch',
+            #  hide_index=True
+            )
 
 with col2:
-    st.markdown("### Quantidade (Erros)")
-    fig_qt_devolucao, dev_qt_devolucao = rel_qt_motivo_devolucao(df)
+    fig_qt_devolucao, dev_qt_devolucao = rel_qt_motivo_devolucao(df, filtro_avaria)
     st.plotly_chart(fig_qt_devolucao, width='stretch')
-    st.dataframe(
-        dev_qt_devolucao
-        .sort_values(by='MES_ANO',ascending=False),
-        width='stretch',
-        #  hide_index=True
-        )
+    with st.expander(":material/visibility: Mostrar Tabela"):
+        st.dataframe(
+            dev_qt_devolucao
+            .sort_values(by='MES_ANO',ascending=False),
+            width='stretch',
+            #  hide_index=True
+            )
 
-with st.expander("Análise Detalhada"):
-    
-    st.markdown("# Análise por Tipo Detalhado")
-    c_1, c_2 = st.columns(2)
-    with c_1:
-        st.markdown('### Valor (R$)')
 
-        fig_valor_devolucao_II, dev_valor_devolucao_II = rel_valor_motivo_devolucao_II(df)
-        st.plotly_chart(fig_valor_devolucao_II, width='stretch')
+st.markdown("# Análise por Tipo Detalhado")
+c_1, c_2 = st.columns(2)
+with c_1:
+
+    fig_valor_devolucao_II, dev_valor_devolucao_II = rel_valor_motivo_devolucao_II(df)
+    st.plotly_chart(fig_valor_devolucao_II, width='stretch')
+    with st.expander(":material/visibility: Mostrar Tabela"):
         st.dataframe(
             dev_valor_devolucao_II
             .sort_values(by='MES_ANO',ascending=False)
@@ -489,10 +545,10 @@ with st.expander("Análise Detalhada"):
             width='stretch',
             )
 
-    with c_2:
-        st.markdown("### Quantidade (Erros)")
-        fig_qt_devolucao_II, dev_qt_devolucao_II = rel_qt_motivo_devolucao_II(df)
-        st.plotly_chart(fig_qt_devolucao_II, width='stretch')
+with c_2:
+    fig_qt_devolucao_II, dev_qt_devolucao_II = rel_qt_motivo_devolucao_II(df)
+    st.plotly_chart(fig_qt_devolucao_II, width='stretch')
+    with st.expander(":material/visibility: Mostrar Tabela"):
         st.dataframe(
             dev_qt_devolucao_II
             .sort_values(by='MES_ANO',ascending=False),
@@ -504,13 +560,15 @@ st.divider()
 
 fig_pendencia_financeira, df_pendencia_financeira = rel_pendencia_financeira(df)
 st.markdown("# Pendência Financeira")
+st.write(f"Valor a pagar total: R$ {df_pendencia_financeira["VALOR TOTAL"].sum():,.2f}".replace(',','x').replace('.',',').replace('x','.'))
 st.plotly_chart(fig_pendencia_financeira)
-st.dataframe(
-    df_pendencia_financeira
-    .style.format({"VALOR TOTAL": "R$ {:.,2f}".replace(',','x').replace('.',',').replace('x','.')}),
-    width='stretch',
-    hide_index=True
-    )
+with st.expander(":material/visibility: Mostrar Tabela"):
+    st.dataframe(
+        df_pendencia_financeira
+        .style.format({"VALOR TOTAL": "R$ {:.,2f}".replace(',','x').replace('.',',').replace('x','.')}),
+        width='stretch',
+        hide_index=True
+        )
 st.divider()
 
 # --- SEÇÃO 2: ANÁLISE DO ÚLTIMO MÊS ---
@@ -528,8 +586,6 @@ mes_selecionado = st.selectbox("Selecione o período para análise detalhada:",
 
 # Filtrando o dataframe para o mês selecionado
 df_mensal = df[df['DATA NF'].dt.to_period('M').astype(str) == mes_selecionado]
-
-print("dfInfo",df_mensal.info())
 
 col_a, col_b = st.columns(2)
 
