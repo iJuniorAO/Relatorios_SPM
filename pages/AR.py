@@ -9,7 +9,6 @@ COMPANY_CODE = 10
 PENDING_STATUS = ["NF Pendente"]
 OPERATION_TYPES = ['Compra', 'Venda', 'Entrada', 'Saída']
 VALID_STATUSES = ["NFe", "NFCe"]
-COLUNAS_EXPORT = ["Hora", "Status da Nfe", "NFC-e", "Status da NFC-e", "Status Evento de NFC-e", "Usuário", "MesAno", "Mes_Ref", "Ano_Ref", "Mes_Ano"]
 
 FINANCIAL_CONDITIONS = [
     lambda df: df['Operação (Tipo)'].str.contains('Compra', case=False, na=False),
@@ -129,17 +128,15 @@ def process_dataframe(df):
     return filter_dataframes(df) + (df,)
 
 def criar_balanco_devolucao(df):
-    grouped_df = df.groupby(["MesAno", "CategoriaFinanceira"])["Total"].sum().unstack()
+    grouped_df = df.pivot_table(index='Referência', columns='CategoriaFinanceira', values='Total', aggfunc='sum')
 
     grouped_df = grouped_df[["Devolução Fornecedor", "Devolução Loja"]]
     grouped_df["Devolução Loja"] = -grouped_df["Devolução Loja"]
     grouped_df["Balanço"] = grouped_df.sum(axis=1)
-
+  
     df_export = df[df["CategoriaFinanceira"].isin(["Devolução Fornecedor", "Devolução Loja"])]
-    df_export = df_export.drop(columns=COLUNAS_EXPORT)
 
     plot_df = grouped_df.reset_index()
-
 
     fig = go.Figure()
 
@@ -147,7 +144,7 @@ def criar_balanco_devolucao(df):
 
     fig.add_trace(
         go.Bar(
-            x=plot_df['MesAno'],
+            x=plot_df['Referência'],
             y=plot_df['Balanço'],
             text=plot_df['Balanço'],
             texttemplate='%{y:.2s}',
@@ -157,6 +154,7 @@ def criar_balanco_devolucao(df):
         )
     )
     fig.update_layout(
+        title="**Balanço Devolução",
         xaxis_title="Mês/Ano",
         yaxis_title="Valor (R$)",
         template="plotly_white",
@@ -177,30 +175,30 @@ def criar_balanco_devolucao(df):
         )
     )
 
-    return fig, grouped_df, df_export
+    grouped_df = grouped_df.sort_index(ascending=False)
+    grouped_df.index = grouped_df.index.strftime('%m/%Y')
+    return fig, grouped_df
 
 def create_financial_balance_evolution(df, columns_to_remove):
     """Create a financial balance evolution chart."""
-    grouped_df = df.groupby(["MesAno", "CategoriaFinanceira"])["Total"].sum().unstack()
-    grouped_df = grouped_df.drop(columns=columns_to_remove)
 
+    df = df[~df["CategoriaFinanceira"].isin(columns_to_remove)]
+    grouped_df = df.pivot_table(index='Referência', columns='CategoriaFinanceira', values='Total', aggfunc='sum')
+    
     # Apply negative sign to expense categories
     for category in NEGATIVE_CATEGORIES:
         if category in grouped_df.columns:
             grouped_df[category] = -grouped_df[category]
 
     grouped_df["Balanço"] = grouped_df.sum(axis=1)
-
     plot_df = grouped_df.reset_index()
-
-
-    fig = go.Figure()
 
     colors = ['#1f77b4' if x >= 0 else '#d62728' for x in plot_df['Balanço']]
 
+    fig = go.Figure()
     fig.add_trace(
         go.Bar(
-            x=plot_df['MesAno'],
+            x=plot_df['Referência'],
             y=plot_df['Balanço'],
             text=plot_df['Balanço'],
             texttemplate='%{y:.2s}',
@@ -210,10 +208,15 @@ def create_financial_balance_evolution(df, columns_to_remove):
         )
     )
     fig.update_layout(
+        title='Evolução Balanço Financeiro',
         xaxis_title="Mês/Ano",
         yaxis_title="Valor (R$)",
         template="plotly_white",
-        showlegend=False
+        showlegend=False,
+        xaxis=dict(
+            tickformat="%m/%Y",
+            dtick="M1",
+        )
     )
     fig.update_xaxes(
         # rangeslider_visible=True,
@@ -226,6 +229,8 @@ def create_financial_balance_evolution(df, columns_to_remove):
         )
     )
 
+    grouped_df = grouped_df.sort_index(ascending=False)
+    grouped_df.index = grouped_df.index.strftime("%m/%Y")
     return fig, grouped_df
 
 def create_revenue_chart(df):
@@ -246,6 +251,7 @@ def create_revenue_chart(df):
         )
     )
     fig.update_layout(
+        title='Faturamento',
         xaxis_title="Referência",
         yaxis_title="Valor (R$)",
         template="plotly_white",
@@ -266,17 +272,29 @@ def create_revenue_chart(df):
     )
     return fig, revenue_df
 
-def create_losses_chart(df):
+def create_losses_chart(df, df_completo):
+    colunas_remover = NEGATIVE_CATEGORIES
+    colunas_remover.remove('Compra')
 
-    df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
-    losses_data = df[df['CategoriaFinanceira'] != 'Devolução Fornecedor'].groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
+    def verDetalhe(df_temp, colunas_remover):
+        df_detalhe = df_temp[["Cliente/Fornecedor","Referência","CategoriaFinanceira","Operação (Nome)","Total"]]
 
-    'concat', losses_data
-    fig = go.Figure()
+        df_detalhe = df_detalhe.groupby(["Referência","CategoriaFinanceira","Cliente/Fornecedor"])["Total"].sum().reset_index()
+        df_detalhe = df_detalhe[df_detalhe["CategoriaFinanceira"].isin(colunas_remover)]
+        df_detalhe = df_detalhe.set_index('Referência')
+        df_detalhe = df_detalhe.sort_index(ascending=False)
+
+        df_detalhe.index = df_detalhe.index.strftime('%m/%Y')
+ 
+        return df_detalhe
+
+
+    losses_data = df[df["CategoriaFinanceira"].isin(colunas_remover)]
 
     # Create a trace for each category
     colors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3']
 
+    fig = go.Figure()
     for i, category in enumerate(losses_data['CategoriaFinanceira'].unique()):
         filtered_df = losses_data[losses_data['CategoriaFinanceira'] == category]
         color = colors[i]
@@ -294,7 +312,7 @@ def create_losses_chart(df):
             textfont=dict(color=color),
         ))
     fig.update_layout(
-        title="Evolução Temporal das Perdas por Categoria",
+        title="Evolução Temporal Perdas por Categoria",
         xaxis_title="Data de Referência",
         yaxis_title="Prejuízo (R$)",
         template="plotly_white",
@@ -314,7 +332,18 @@ def create_losses_chart(df):
             ]
         )
     )
-    return fig, losses_data
+    
+    losses_sum = losses_data.groupby('Referência')['Total'].sum().to_frame()
+    losses_sum = losses_sum.sort_index(ascending=False)
+    losses_sum.index = losses_sum.index.strftime('%m/%Y')
+    
+    losses_data = losses_data.set_index('Referência')
+    losses_data = losses_data.sort_index(ascending=False)
+    losses_data.index = losses_data.index.strftime('%m/%Y')
+
+    df_detalhado  = verDetalhe(df_completo, colunas_remover)
+    
+    return fig, losses_data, losses_sum, df_detalhado
 
 
 st.markdown("# :material/Chart_Data: Apresentação de Resultados")
@@ -364,51 +393,67 @@ status_selecionados = st.segmented_control(
     options=opcoes_status,
     default=['NFe']
 )
+st.divider()
+
 df = df[df['Status'].isin(status_selecionados)]
 df_compra, df_venda, df_entrada, df_saida, df = process_dataframe(df)
 
-st.markdown("# Faturamento")
 
 df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
 df_grouped = df.groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
 
-# fig_Faturamento, df_Faturamento = create_revenue_chart(df_venda)
 fig_Faturamento, df_Faturamento = create_revenue_chart(df_grouped)
 st.plotly_chart(fig_Faturamento, width="stretch")
 
 st.divider()
-st.markdown("# Evolução Balanço Financeiro")
+# st.markdown("# Evolução Balanço Financeiro")
 
 columns_to_remove = BALANCE_COLUMNS_TO_REMOVE
-fig_BalancoFInanceiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df, columns_to_remove)
+fig_Balanco_Financeiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df_grouped, columns_to_remove)
 
-st.plotly_chart(fig_BalancoFInanceiro, width='stretch')
-with st.expander(":material/Settings: Detalhes"):
+st.plotly_chart(fig_Balanco_Financeiro, width='stretch')
+with st.expander(":material/Settings: Detalhes Financeiros"):
     st.markdown(f'### {len(columns_to_remove)} Colunas Ignoradas:')
     for col in columns_to_remove:
         st.write(col)
     st.markdown('### Gráfico em Tabela:')
     st.dataframe(
-        df_EvolucaoFinanceiro.style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
+        df_EvolucaoFinanceiro.style
+        .map(lambda x: 'color: red;' if x<0 else None)
+        .format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        ),
         width='stretch'
     )
+
 st.divider()
 
-fig_losses, df_output = create_losses_chart(df_saida)
 
-st.markdown('# Perdas')
+fig_losses, df_losses, df_losses_sum, df_losses_detail  = create_losses_chart(df_grouped, df)
+
 st.plotly_chart(fig_losses, width='stretch')
 
-with st.expander(":material/Settings: Detalhes"):
-    st.dataframe(df_output)
+with st.expander(":material/Settings: Detalhes Perdas"):
+    col_loss_a, col_loss_b = st.columns(2)
+    with col_loss_a:
+        st.write('Valores Totais')
+        st.dataframe(df_losses_sum.style.format({"Total": "R$ {:.,2f}".replace(",", "X").replace(".", ",").replace("X", ".")}))
+    with col_loss_b:
+        st.write('Tabela Gráfico')
+        st.dataframe(df_losses.style.format({"Total": "R$ {:.,2f}".replace(",", "X").replace(".", ",").replace("X", ".")}))
+    st.write('Tabela Mais Detalhada')
+    losses_options = st.segmented_control(
+        'Selecione qual categoria deseja filtrar',
+        options=df_losses_detail['CategoriaFinanceira'].unique(),
+        selection_mode='multi',
+        default=df_losses_detail['CategoriaFinanceira'].unique(),
+        )
+    df_losses_detail = df_losses_detail[df_losses_detail["CategoriaFinanceira"].isin(losses_options)]
+    if df_losses_detail.empty:
+        st.info('Nenhuma Opção Escolhida')
+    else:
+        st.dataframe(df_losses_detail.style.format({"Total": "R$ {:.,2f}".replace(",", "X").replace(".", ",").replace("X", ".")}))
 
-df_devolucao_loja = df_entrada[df_entrada["CategoriaFinanceira"]=="Devolução Loja"]
-
-
-st.markdown('# Balanço Devolução')
-fig_balanco_dev, df_balanco_dev, df_balanco_dev_2 = criar_balanco_devolucao(df)
-
+fig_balanco_dev, df_balanco_dev = criar_balanco_devolucao(df_grouped)
 st.plotly_chart(fig_balanco_dev, width='stretch')
-with st.expander(":material/Settings: Detalhes"):
-    st.dataframe(df_balanco_dev)
-    st.dataframe(df_balanco_dev_2)
+with st.expander(":material/Settings: Detalhes Balanço Devolução"):
+    st.dataframe(df_balanco_dev.style.format(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")))
