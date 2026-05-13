@@ -407,6 +407,9 @@ def create_montly_sales_return(df):
     fig.update_yaxes(title_text="<b>%</b> Taxa de Retorno", secondary_y=False, ticksuffix="%")
     fig.update_yaxes(title_text="<b>R$</b> Volume de Vendas", secondary_y=True)
 
+    df_group = df_group.set_index('Cliente/Fornecedor')
+    df_group = df_group.drop(columns="Referência")
+
     return df_group, fig
 
 
@@ -641,14 +644,13 @@ else:
     
     # Display "Top Offenders" table
     st.markdown("### Top 5 Clientes com Maior Índice de Devolução")
-    st.table(df_sales_return[['Cliente/Fornecedor', 'Venda', 'Devolução Loja', '% Retorno']]
+    st.table(df_sales_return
             .head(5)
             .style.format({
                 "Venda":"R$ {:.,2f}".replace(",", "X").replace(".", ",").replace("X", "."),
                 "Devolução Loja":"R$ {:.,2f}".replace(",", "X").replace(".", ",").replace("X", "."),
                 "% Retorno":"{:.,2f} %".replace(",", "X").replace(".", ",").replace("X", "."),
-                })
-            ,hide_index=True)
+    }))
 
 
 st.divider()
