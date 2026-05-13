@@ -517,6 +517,116 @@ with st.expander(":material/Settings: Detalhes Perdas"):
     else:
         st.dataframe(df_losses_detail.style.format({"Total": "R$ {:.,2f}".replace(",", "X").replace(".", ",").replace("X", ".")}))
 
+
+
+def create_sales_return_timeseries(df):
+    # 2. Filter for the last 12 months from the most recent date in the dataset
+    last_date = df['Referência'].max()
+    start_date = last_date - pd.DateOffset(months=12)
+    df_last_12 = df[df['Referência'] > start_date].copy()
+
+    # 4. Filter categories and group
+    df_filtered = df_last_12[df_last_12["CategoriaFinanceira"].isin(["Venda", "Devolução Loja"])]
+    
+    # Pivot to get Sales and Returns as columns per month
+    df_monthly = (df_filtered.groupby(["Referência", 'CategoriaFinanceira'])['Total']
+                  .sum()
+                  .unstack(fill_value=0)
+                  .reset_index())
+    
+    # 5. Calculate monthly percentage
+    df_monthly['% Retorno'] = (df_monthly['Devolução Loja'] / df_monthly['Venda'] * 100).fillna(0)
+    
+    # Sort chronologically
+    df_monthly = df_monthly.sort_values('Referência')
+
+
+    # Create figure with secondary y-axis
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # 1. Add Bar Chart for the actual Return Value (Left Axis)
+    fig.add_trace(
+        go.Bar(
+            x=df_monthly['Referência'],
+            y=df_monthly['Devolução Loja'],
+            text=df_monthly["Devolução Loja"],
+            texttemplate="%{y:.2s}",
+            textposition="outside",
+            name="Valor Devolvido (R$)",
+            # marker_color='rgba(158, 202, 225, 0.6)', # Light blue
+            hovertemplate='Mês: %{x}<br>Valor: R$ %{y:,.2f}<extra></extra>'
+        ),
+        secondary_y=False,
+    )
+    # 2. Add Line Chart for the Percentage (Right Axis)
+    fig.add_trace(
+        go.Scatter(
+            x=df_monthly['Referência'],
+            y=df_monthly['% Retorno'],
+            name="% Taxa de Retorno",
+            mode='lines+markers+text',
+            text=[f"{val:.1f}%" for val in df_monthly['% Retorno']],
+            textposition="top center",
+            textfont=dict(color="red"),
+            line=dict(color='firebrick', width=3),
+            hovertemplate='Mês: %{x}<br>Taxa: %{y:.2f}%<extra></extra>'
+        ),
+        secondary_y=True,
+    )
+    # 3. Update Layout and Axes
+    fig.update_layout(
+        title="Evolução de Devoluções: Valor vs. Porcentagem",
+        xaxis=dict(
+            tickformat="%m/%Y",
+            dtick="M1",
+        ),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="center", x=0.5),
+        height=500
+    )
+    # Set y-axis titles
+    fig.update_yaxes(title_text="<b>Valor</b> Retornado (R$)", secondary_y=False)
+    fig.update_yaxes(title_text="<b>Taxa</b> de Retorno (%)", ticksuffix="%", secondary_y=True, range=[0, max(df_monthly['% Retorno']) * 1.2])
+
+
+    latest_data = df_monthly.iloc[-1] # Get the most recent month
+    fig_gauge = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = latest_data['% Retorno'],
+        number={'valueformat': '.3', 'suffix':'%'},
+        title = {'text': f"Taxa de Devolução - {latest_data['Referência'].strftime("%m/%Y")}"},
+        gauge = {
+            'axis': {'range': [0, 1], 'tickformat': '0.0%'},
+            'steps': [
+                {'range': [0, 0.25], 'color': "lightgreen"},
+                {'range': [0.25, 0.75], 'color': "yellow"},
+                {'range': [0.75, 1], 'color': "red"}
+            ],
+            'threshold': {'line': {'color': "black", 'width': 10} ,'value': 0.75}
+        }
+    ))
+    return df_monthly, fig, fig_gauge
+
+
+df_history_sales_return, fig_combined_sales_return, fig_gauche_sales_return = create_sales_return_timeseries(df_grouped)
+
+st.markdown("# Análise de Devoluções: Últimos 12 Meses")
+current_perc = df_history_sales_return['% Retorno'].iloc[-1]
+if current_perc > 1:
+    st.error(f":material/Priority_High: A taxa de devolução atual ({current_perc:.2f}%) está acima do limite de 1%.")
+
+st.divider()    
+st.markdown("### Histórico de Devoluções (R$ vs %)")
+st.plotly_chart(fig_combined_sales_return, width='stretch')
+
+ 
+st.markdown("### Taxa Devolução Média")
+st.plotly_chart(fig_gauche_sales_return, width='stretch')
+st.divider()
+
+
+
+
 st.markdown("## Análise Devolução Mensal")
 meses = df[['Referência']].copy()
 meses = df["Referência"].unique().strftime("%m/%Y")
