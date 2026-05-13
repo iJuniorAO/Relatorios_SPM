@@ -362,7 +362,7 @@ def create_montly_sales_return(df):
     df_group["% Retorno"] = (df_group["Devolução Loja"] / df_group["Venda"] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
     
     df_group = df_group.sort_values(by="% Retorno", ascending=False)
-    
+
     # Create figure with secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -599,13 +599,19 @@ def create_sales_return_timeseries(df):
         number={'valueformat': '.3', 'suffix':'%'},
         title = {'text': f"Taxa de Devolução - {latest_data['Referência'].strftime("%m/%Y")}"},
         gauge = {
-            'axis': {'range': [0, 1], 'tickformat': '0.0%'},
+            'axis': {
+                'range': [0, 1],
+                'tickmode': 'array',
+                'tickvals': [x/10 for x in range (0,11)],
+                'tickformat': '.3f',
+                'ticksuffix': "%",
+            },
             'steps': [
                 {'range': [0, 0.25], 'color': "lightgreen"},
                 {'range': [0.25, 0.75], 'color': "yellow"},
                 {'range': [0.75, 1], 'color': "red"}
             ],
-            'threshold': {'line': {'color': "black", 'width': 10} ,'value': 0.75}
+            'threshold': {'line': {'color': "black", 'width': 4} ,'value': 0.75}
         }
     ))
     return df_monthly, fig, fig_gauge
