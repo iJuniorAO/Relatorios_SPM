@@ -209,7 +209,7 @@ def create_financial_balance_evolution(df, columns_to_remove):
         )
     )
     fig.update_layout(
-        title='Evolução Balanço Financeiro',
+        title='Entradas e Saidas x Mes/Ano',
         xaxis_title="Mês/Ano",
         yaxis_title="Valor (R$)",
         template="plotly_white",
@@ -252,7 +252,7 @@ def create_revenue_chart(df):
         )
     )
     fig.update_layout(
-        title='Faturamento',
+        title='Faturamento x Mes/Ano',
         xaxis_title="Referência",
         yaxis_title="Valor (R$)",
         template="plotly_white",
@@ -289,7 +289,6 @@ def create_losses_chart(df, df_completo):
  
         return df_detalhe
 
-
     losses_data = df[df["CategoriaFinanceira"].isin(colunas_remover)]
 
     # Create a trace for each category
@@ -305,7 +304,6 @@ def create_losses_chart(df, df_completo):
             y=filtered_df['Total'],
             name=category,
             mode='lines+markers+text',
-            fill='tozeroy',
             line=dict(color=color),
             text=filtered_df['Total'],
             texttemplate='%{text:.2s}',
@@ -473,11 +471,12 @@ def create_montly_stores_sales_return(df):
     return df_group, fig
 
 
+check_authentication()
+
 st.markdown("# :material/Chart_Data: Apresentação de Resultados")
 pegar_manual = st.toggle("Desejo pegar arquivos manualmente", value=True, disabled=True)
 st.markdown("Selecione os arquivos `.xls` ou `.xlsx` para unir as linhas em um único DataFrame.")
 
-check_authentication()
 perfil = st.session_state.perfil
 
 
@@ -529,11 +528,14 @@ df_compra, df_venda, df_entrada, df_saida, df = process_dataframe(df)
 df['Referência'] = df['Referência'].dt.to_period('M').dt.to_timestamp()
 df_grouped = df.groupby(['Referência', 'CategoriaFinanceira'])['Total'].sum().reset_index()
 
+st.markdown('# Faturamento')
 fig_Faturamento, df_Faturamento = create_revenue_chart(df_grouped)
 st.plotly_chart(fig_Faturamento, width="stretch")
+with st.expander(":material/Settings: Detalhes dados"):
+    st.dataframe(df)
 
 st.divider()
-# st.markdown("# Evolução Balanço Financeiro")
+st.markdown("### Evolução Balanço Financeiro")
 
 columns_to_remove = BALANCE_COLUMNS_TO_REMOVE
 fig_Balanco_Financeiro, df_EvolucaoFinanceiro = create_financial_balance_evolution(df_grouped, columns_to_remove)
@@ -553,8 +555,7 @@ with st.expander(":material/Settings: Detalhes Financeiros"):
     )
 
 st.divider()
-
-
+st.markdown('# Saídas')
 fig_losses, df_losses, df_losses_sum, df_losses_detail  = create_losses_chart(df_grouped, df)
 
 st.plotly_chart(fig_losses, width='stretch')
@@ -613,7 +614,7 @@ def create_sales_return_gauge(df):
             'axis': {
                 'range': [0, 1],
                 'tickmode': 'array',
-                'tickvals': [x/10 for x in range (0,11)],
+                'tickvals': [x/10 for x in range (0,21)],
                 'tickformat': '.3f',
                 'ticksuffix': "%",
             },
@@ -627,14 +628,13 @@ def create_sales_return_gauge(df):
     ))
     return  fig_gauge
 
-
-fig_gauche_sales_gauge = create_sales_return_gauge(df_grouped)
-
 st.space()
-st.markdown("## Análise Devolução Mensal")
+st.markdown("# Devoluções")
 
 fig_sales_return = create_montly_sales_return(df)
 st.plotly_chart(fig_sales_return,width='stretch')
+
+fig_gauche_sales_gauge = create_sales_return_gauge(df_grouped)
 
 st.markdown("### Taxa Devolução Média")
 st.plotly_chart(fig_gauche_sales_gauge, width='stretch')
@@ -664,6 +664,11 @@ else:
 
 
 st.divider()
+st.markdown('### Balanço Devolução')
+st.caption('Os valores de devolução de Entrada são os as devoluções das lojas')
+st.caption('Os valores de devolução de Saída são: ')
+st.caption('-Recebimento: NFs de Compra que foi emitido devolução')
+st.caption('-Devolução: Produtos Avariados que teremos reposição')
 fig_balanco_dev, df_balanco_dev = criar_balanco_devolucao(df_grouped)
 st.plotly_chart(fig_balanco_dev, width='stretch')
 with st.expander(":material/Settings: Detalhes Balanço Devolução"):
