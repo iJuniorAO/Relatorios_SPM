@@ -6,3 +6,4 @@ xlrd
 supabase
 openpyxl
 babel
+python-calamine
