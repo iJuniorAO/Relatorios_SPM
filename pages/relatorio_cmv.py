@@ -15,6 +15,8 @@ FORMATACAO_ALERTAS = {
     "Markup (%)": "{:.2f} %"
 }
 
+diclamer_aba = "As informações abaixos poderão ser alteradas conforme o :blue[filtro] na aba lateral"
+
 #   LOGIN
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -40,8 +42,15 @@ with st.sidebar:
     st.divider()
 
     st.markdown("# Configurações")
+    st.markdown("## Planilha")
     arquivo = st.file_uploader("Escolha o arquivo Excel", type=['xlsx'])
-    fator_giro = st.number_input("Digite a porcentagem desejada do giro do produto",0.0,100.0,2.0,format="%.2f",step=1.0)
+    
+    st.markdown("## Filtro")
+    fator_giro = st.number_input(":blue[Baixo Giro] | Digite a porcentagem desejada do giro do produto",0.0,100.0,2.0,format="%.2f",step=1.0,key='giroInput')
+
+    fator_margem = st.number_input(":blue[Baixa Margem] | Digite a porcentagem desejada da margem",0.0,100.0,3.0,format="%.2f",step=1.0,key='margemInput')  
+    
+    st.markdown("## Filtro Gráfico")
     ignora_margem_ficticia = st.toggle("Deseja ignorar magem >90%?")
 if arquivo:
     # Chama as funções do arquivo de processamento
@@ -56,7 +65,7 @@ if arquivo:
     if ignora_margem_ficticia:
         df_bruto = df_bruto[df_bruto["Margem (%)"]<90].copy()
 
-    df_processado, alertas, resumo = calcular_metricas(df_bruto,fator_giro)
+    df_processado, alertas, resumo = calcular_metricas(df_bruto,fator_giro, fator_margem)
 
     # Exibição de Métricas (Cards)
     col1, col2, col3 = st.columns(3)
@@ -70,7 +79,7 @@ if arquivo:
     st.markdown("# :material/Flash_On: Central de Alertas")
     st.markdown(f"### :red[{num_alertas}] Tipos de Alertas")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Margem Baixa + Estoque Alto", "Baixo Giro", "Margem Negativa", "Estoque Negativo"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Margem Baixa + Estoque Alto", "Baixo Giro", "Margem Negativa", "Baixa Margem","Estoque Negativo"])
 
     with tab1:
         if not alertas['alerta_margem'].empty:
@@ -83,7 +92,8 @@ if arquivo:
 
     with tab2:
         if not alertas['alerta_giro'].empty:
-            st.markdown(f"### {len(alertas['alerta_giro'])} Produtos com Baixo Giro")
+            st.caption(diclamer_aba)
+            st.markdown(f"### :blue[{len(alertas['alerta_giro'])}] Produtos com Baixo Giro")
             st.write(f"|- Giro de estoque em :blue[{fator_giro}%]")
             st.dataframe(alertas['alerta_giro'].style.format(FORMATACAO_ALERTAS), width="stretch",height="content")
         else:
@@ -95,12 +105,21 @@ if arquivo:
             st.dataframe(alertas['alerta_prejuizo'].style.format(FORMATACAO_ALERTAS), width="stretch",height="content")
         else:
             st.success("Excelente! Nenhum produto com margem negativa.")
+    
     with tab4:
+        st.caption(diclamer_aba)
+        if not alertas['alerta_magem_filtro'].empty:
+            st.markdown(f"### :blue[{len(alertas['alerta_magem_filtro'])}] Produtos com Margem abaixo de :blue[{fator_margem:.2f} %]")
+            st.dataframe(alertas['alerta_magem_filtro'].style.format(FORMATACAO_ALERTAS),width="stretch",height="content")
+        else:
+            st.success("Excelente! Nenhum produto com margem baixa.")
+
+    with tab5:
         if not alertas['alerta_negativo'].empty:
             st.markdown(f"### {len(alertas["alerta_negativo"])} Produtos com Estoque Negativo")
             st.dataframe(alertas['alerta_negativo'].style.format(FORMATACAO_ALERTAS),width="stretch",height="content")
         else:
-            st.success("Excelente! Nenhum produto com estoque negativa.")
+            st.success("Excelente! Nenhum produto com estoque negativo.")
 
 
     st.divider()
