@@ -6,6 +6,15 @@ st.set_page_config(page_title="Relatório CMV", layout="wide")
 COLUNAS_EXCEL = ["Chamada", "Nome", "Dt Ult. Movim", "Qt Estoque", 
                "Qt Venda", "Vl Financ.", "CMV", "Margem (%)"]
 
+FORMATACAO_ALERTAS = {
+    "Qt Estoque": "{:.2f}",
+    "Qt Venda": "{:.2f}",
+    "Vl Financ.": "R$ {:.2f}",
+    "CMV": "R$ {:.2f}",
+    "Margem (%)": "{:.2f} %",
+    "Markup (%)": "{:.2f} %"
+}
+
 #   LOGIN
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -68,7 +77,7 @@ if arquivo:
             st.markdown(f"### {len(alertas['alerta_margem'])} Margem e Giro Baixo")
             st.write(f"|- Margem abaixo do CMV: :blue[{resumo['margem']:.2f}%]")
             st.write(f"|- Giro de estoque em :blue[{fator_giro}%]")
-            st.dataframe(alertas['alerta_margem'], width="stretch",height="content")
+            st.dataframe(alertas['alerta_margem'].style.format(FORMATACAO_ALERTAS), width="stretch",height="content")
         else:
             st.success("Nenhum produto com estoque crítico e margem baixa.")
 
@@ -76,18 +85,20 @@ if arquivo:
         if not alertas['alerta_giro'].empty:
             st.markdown(f"### {len(alertas['alerta_giro'])} Produtos com Baixo Giro")
             st.write(f"|- Giro de estoque em :blue[{fator_giro}%]")
-            st.dataframe(alertas['alerta_giro'], width="stretch",height="content")
+            st.dataframe(alertas['alerta_giro'].style.format(FORMATACAO_ALERTAS), width="stretch",height="content")
+        else:
+            st.success("Excelente! Nenhum produto com giro baixo.")
 
     with tab3:
         if not alertas['alerta_prejuizo'].empty:
             st.markdown(f"### {len(alertas['alerta_prejuizo'])} Produtos com Margem Negativa")
-            st.dataframe(alertas['alerta_prejuizo'], width="stretch",height="content")
+            st.dataframe(alertas['alerta_prejuizo'].style.format(FORMATACAO_ALERTAS), width="stretch",height="content")
         else:
             st.success("Excelente! Nenhum produto com margem negativa.")
     with tab4:
         if not alertas['alerta_negativo'].empty:
             st.markdown(f"### {len(alertas["alerta_negativo"])} Produtos com Estoque Negativo")
-            st.dataframe(alertas['alerta_negativo'], width="stretch",height="content")
+            st.dataframe(alertas['alerta_negativo'].style.format(FORMATACAO_ALERTAS),width="stretch",height="content")
         else:
             st.success("Excelente! Nenhum produto com estoque negativa.")
 

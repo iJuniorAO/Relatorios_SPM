@@ -17,12 +17,14 @@ def carregar_dados(caminho_arquivo, colunas=None):
             return {"erro":True, "df":df}
 
 def calcular_metricas(df,fator_giro):
-    colunas_padrao = ["Chamada","Nome","Qt Estoque", "Qt Venda", "Vl Financ.", "CMV", "Margem (%)"]
+    colunas_padrao = ["Chamada","Nome","Qt Estoque", "Qt Venda", "Vl Financ.", "CMV", "Margem (%)", "Markup (%)"]
     
     df['Giro'] = df['Qt Venda'] / (df['Qt Estoque'] + 0.01)
 
-    df["Margem (%)"] = round(df["Margem (%)"],2)
+    df["Margem (%)"] = (df["Vl Financ."] - df["CMV"])/df["Vl Financ."]*100
     
+    df["Markup (%)"] = round(df["Margem (%)"],3)
+
     # Resumo Financeiro
     total_venda = df['Vl Financ.'].sum()
     total_cmv = df['CMV'].sum()
