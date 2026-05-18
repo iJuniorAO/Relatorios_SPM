@@ -16,11 +16,15 @@ def carregar_dados(caminho_arquivo, colunas=None):
             print(f"ERRO - Não foi possível abrir {e}")
             return {"erro":True, "df":df}
 
-def calcular_metricas(df,fator_giro):
-    colunas_padrao = ["Chamada","Nome","Qt Estoque", "Qt Venda", "Vl Financ.", "CMV", "Margem (%)"]
-
-    df['Giro'] = df['Qt Venda'] / (df['Qt Estoque'] + 0.01)
+def calcular_metricas(df,fator_giro, fator_margem):
+    colunas_padrao = ["Chamada","Nome","Qt Estoque", "Qt Venda", "Vl Financ.", "CMV", "Margem (%)", "Markup (%)"]
     
+    df['Giro'] = df['Qt Venda'] / (df['Qt Estoque'] + 0.01)
+
+    df["Margem (%)"] = (df["Vl Financ."] - df["CMV"])/df["Vl Financ."]*100
+    
+    df["Markup (%)"] = round(df["Margem (%)"],3)
+
     # Resumo Financeiro
     total_venda = df['Vl Financ.'].sum()
     total_cmv = df['CMV'].sum()
@@ -32,6 +36,9 @@ def calcular_metricas(df,fator_giro):
     alerta_margem = alerta_giro[(alerta_giro['Margem (%)'] < margem_media)]
     alerta_margem = alerta_margem[colunas_padrao].sort_values("Margem (%)")
 
+    alerta_margem_filtro = df[df['Margem (%)'] < (fator_margem/100)]
+    alerta_margem_filtro = alerta_margem_filtro[colunas_padrao].sort_values("Margem (%)",ascending=False)
+    
     alerta_giro = alerta_giro[colunas_padrao].sort_values("Margem (%)",ascending=False)
     
     alerta_prejuizo = df[df["Margem (%)"]<0].copy()
@@ -49,6 +56,7 @@ def calcular_metricas(df,fator_giro):
         "alerta_margem": alerta_margem,
         "alerta_prejuizo":alerta_prejuizo,
         "alerta_giro":alerta_giro,
+        "alerta_magem_filtro":alerta_margem_filtro,
         "alerta_negativo":alerta_negativo,
         }
     
