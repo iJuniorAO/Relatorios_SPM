@@ -1,5 +1,4 @@
 .streamlit/secrets.toml
-
 pages/__pycache__/
 __pycache__/
 .devcontainer/
