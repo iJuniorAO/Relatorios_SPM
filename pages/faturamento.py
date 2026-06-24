@@ -130,6 +130,22 @@ if arquivos_carregados:
     with st.sidebar:
         st.markdown("# Filtros")
 
+        st.markdown("## Meta")
+        meta_input = st.number_input(
+            "Digite o valor da meta (em Milhões de R$)",
+            min_value=0.0,
+            step=0.1,
+            format="%0.2f",
+        )
+        if meta_input:
+            META_MENSAL = meta_input * 1_000_000
+            st.caption(
+                f"Meta personalizada: **R$ {META_MENSAL:,.2f}**".replace(",", "x")
+                .replace(".", ",")
+                .replace("x", ".")
+            )
+
+        st.markdown("## Periodo")
         anos = df_compra["Referência"].dt.year.unique()
         ano_selecionado = st.multiselect(
             "Selecione o Ano", options=sorted(anos), default=anos
@@ -246,9 +262,15 @@ if arquivos_carregados:
         title="Faturamento por Mês",
         markers=True,
         labels={"Total": "Faturamento (R$)", "Mês/Ano": "Período"},
+        text="Total",
     )
+    fig_evolucao.update_traces(texttemplate="%{text:.2s}", textposition="top center")
     fig_evolucao.add_hline(
-        y=META_MENSAL, line_dash="dot", annotation_text="Meta", line_color="red"
+        y=META_MENSAL,
+        line_dash="dot",
+        annotation_text="Meta",
+        line_color="red",
+        annotation_font_color="red",
     )
     fig_evolucao.update_xaxes(
         rangeslider_visible=True,
