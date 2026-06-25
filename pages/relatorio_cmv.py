@@ -219,4 +219,4 @@ if arquivo:
         st.write(df_filtrado)
 
 else:
-    st.info("Aguardando upload do arquivo Excel para gerar o relatório (aba lateral).")
+    st.info("[aba lateral] Aguardando upload do arquivo Excel para gerar o relatório.")
