@@ -27,17 +27,17 @@ def calcular_metricas(df, fator_giro, fator_margem):
         "Nome",
         "Qt Estoque",
         "Qt Venda",
-        "Vl Financ.",
-        "CMV",
+        "Giro",
+        "Total Venda [R$]",
+        "Total Custo [R$]",
         "Margem (%)",
         "Markup (%)",
     ]
 
-    df["Giro"] = df["Qt Venda"] / (df["Qt Estoque"] + 0.01)
-
-    df["Margem (%)"] = (df["Vl Financ."] - df["CMV"]) / df["Vl Financ."] * 100
+    df["Giro"] = (df["Qt Venda"] / (df["Qt Estoque"] + 0.01)) * 100
 
     df["Markup (%)"] = round(df["Margem (%)"], 3)
+    df["Margem (%)"] = (df["Vl Financ."] - df["CMV"]) / df["Vl Financ."] * 100
 
     # Resumo Financeiro
     total_venda = df["Vl Financ."].sum()
@@ -46,14 +46,20 @@ def calcular_metricas(df, fator_giro, fator_margem):
         ((total_venda - total_cmv) / total_venda * 100) if total_venda != 0 else 0
     )
 
-    alerta_giro = df[(df["Qt Estoque"] > 0) & (df["Giro"] < (fator_giro / 100))]
+    # Rename
+    df = df.rename(
+        columns={"Vl Financ.": "Total Venda [R$]", "CMV": "Total Custo [R$]"}
+    )
+
+    # Filter
+    alerta_giro = df[(df["Qt Estoque"] > 0) & (df["Giro"] < fator_giro)]
 
     alerta_margem = alerta_giro[(alerta_giro["Margem (%)"] < margem_media)]
     alerta_margem = alerta_margem[colunas_padrao].sort_values("Margem (%)")
 
-    alerta_margem_filtro = df[df["Margem (%)"] < (fator_margem / 100)]
+    alerta_margem_filtro = df[df["Margem (%)"] < fator_margem]
     alerta_margem_filtro = alerta_margem_filtro[colunas_padrao].sort_values(
-        "Margem (%)", ascending=False
+        "Margem (%)", ascending=True
     )
 
     alerta_giro = alerta_giro[colunas_padrao].sort_values("Margem (%)", ascending=False)
@@ -85,16 +91,16 @@ def calcular_metricas(df, fator_giro, fator_margem):
 
 def CMV_fig_TOPFaturamento(df):
     """Gera um gráfico de barras com os 10 produtos que mais faturaram"""
-    top_10 = df.nlargest(10, "Vl Financ.")
+    top_10 = df.nlargest(10, "Total Venda [R$]")
     fig = px.bar(
         top_10,
-        x="Vl Financ.",
+        x="Total Venda [R$]",
         y="Nome",
         orientation="h",
         title="Top 10 Maior Faturamento",
         labels={"Nome": "Produto"},
         color="Margem (%)",
-        text="Vl Financ.",
+        text="Total Venda [R$]",
         text_auto=".2f",
         color_discrete_sequence=["#007bff"],  # Cor azul padrão
         color_continuous_scale="Blues",
@@ -118,7 +124,7 @@ def CMV_fig_TOPMargem(df):
         orientation="h",
         title="Top 10 Maiores Margens",
         labels={"Nome": "Produto"},
-        color="Vl Financ.",
+        color="Total Venda [R$]",
         text="Margem (%)",
         # text_auto=".2f",
         color_discrete_sequence=["#007bff"],  # Cor azul padrão
@@ -143,10 +149,10 @@ def CMV_fig_Margem_Margem2(df):
     # Adicionar Barras (Faturamento) - Agora Horizontal
     fig.add_trace(
         go.Bar(
-            x=top_10["Vl Financ."],  # Valor no X
+            x=top_10["Total Venda [R$]"],  # Valor no X
             y=top_10["Nome"],  # Nome no Y
             name="Faturamento",
-            text=top_10["Vl Financ."],
+            text=top_10["Total Venda [R$]"],
             texttemplate="R$ %{text:.2s}",
             marker_color="royalblue",
             orientation="h",  # Orientação Horizontal
@@ -195,9 +201,9 @@ def CMV_fig_Margem_Margem(df):
     fig.add_trace(
         go.Bar(
             x=top_10["Nome"],
-            y=top_10["Vl Financ."],
+            y=top_10["Total Venda [R$]"],
             name="Faturamento",
-            text=top_10["Vl Financ."],
+            text=top_10["Total Venda [R$]"],
             texttemplate="R$ %{text:.2s}",
             marker_color="royalblue",
         )
@@ -228,7 +234,7 @@ def CMV_fig_Margem_Margem(df):
 
 def CMV_fig_Fin_Margem(df):
     # 1. Preparar os dados (Top 10)
-    top_10 = df.nlargest(10, "Vl Financ.")
+    top_10 = df.nlargest(10, "Total Venda [R$]")
 
     # 2. Criar a figura
     fig = go.Figure()
@@ -237,9 +243,9 @@ def CMV_fig_Fin_Margem(df):
     fig.add_trace(
         go.Bar(
             x=top_10["Nome"],
-            y=top_10["Vl Financ."],
+            y=top_10["Total Venda [R$]"],
             name="Faturamento",
-            text=top_10["Vl Financ."],
+            text=top_10["Total Venda [R$]"],
             texttemplate="R$ %{text:.2s}",
             marker_color="royalblue",
         )
@@ -271,7 +277,7 @@ def CMV_fig_Fin_Margem(df):
 def CMV_fig_Fin_Margem2(df):
     # 1. Preparar os dados (Top 10 por Faturamento)
     # Invertemos a ordem para que o maior valor apareça no topo do gráfico
-    top_10 = df.nlargest(10, "Vl Financ.").iloc[::-1]
+    top_10 = df.nlargest(10, "Total Venda [R$]").iloc[::-1]
 
     # 2. Criar a figura
     fig = go.Figure()
@@ -279,10 +285,10 @@ def CMV_fig_Fin_Margem2(df):
     # Adicionar Barras (Faturamento) - Horizontal
     fig.add_trace(
         go.Bar(
-            x=top_10["Vl Financ."],  # Valores no eixo X
+            x=top_10["Total Venda [R$]"],  # Valores no eixo X
             y=top_10["Nome"],  # Nomes no eixo Y
             name="Faturamento",
-            text=top_10["Vl Financ."],
+            text=top_10["Total Venda [R$]"],
             texttemplate="R$ %{text:.2s}",
             marker_color="royalblue",
             orientation="h",  # Orientação Horizontal

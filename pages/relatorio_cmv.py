@@ -24,13 +24,11 @@ COLUNAS_EXCEL = [
 FORMATACAO_ALERTAS = {
     "Qt Estoque": "{:.2f}",
     "Qt Venda": "{:.2f}",
-    "Vl Financ.": "R$ {:.2f}",
-    "CMV": "R$ {:.2f}",
+    "Total Venda [R$]": "R$ {:.2f}",
+    "Total Custo [R$]": "R$ {:.2f}",
     "Margem (%)": "{:.2f} %",
     "Markup (%)": "{:.2f} %",
 }
-
-print(1, 3)
 
 diclamer_aba = "As informações abaixos poderão ser alteradas conforme o :blue[filtro] na aba lateral"
 
@@ -125,7 +123,9 @@ if arquivo:
 
     with tab1:
         if not alertas["alerta_margem"].empty:
-            st.markdown(f"### {len(alertas['alerta_margem'])} Margem e Giro Baixo")
+            st.markdown(
+                f"### :blue[{len(alertas['alerta_margem'])}] Margem e Giro Baixo"
+            )
             st.write(f"|- Margem abaixo do CMV: :blue[{resumo['margem']:.2f}%]")
             st.write(f"|- Giro de estoque em :blue[{fator_giro}%]")
             st.dataframe(
@@ -154,7 +154,7 @@ if arquivo:
     with tab3:
         if not alertas["alerta_prejuizo"].empty:
             st.markdown(
-                f"### {len(alertas['alerta_prejuizo'])} Produtos com Margem Negativa"
+                f"### :blue[{len(alertas['alerta_prejuizo'])}] Produtos com Margem Negativa"
             )
             st.dataframe(
                 alertas["alerta_prejuizo"].style.format(FORMATACAO_ALERTAS),
@@ -181,7 +181,7 @@ if arquivo:
     with tab5:
         if not alertas["alerta_negativo"].empty:
             st.markdown(
-                f"### {len(alertas["alerta_negativo"])} Produtos com Estoque Negativo"
+                f"### :blue[{len(alertas["alerta_negativo"])}] Produtos com Estoque Negativo"
             )
             st.dataframe(
                 alertas["alerta_negativo"].style.format(FORMATACAO_ALERTAS),
@@ -209,7 +209,7 @@ if arquivo:
     # Exibição da Tabela
     st.divider()
     st.markdown("# Detalhamento de Produtos")
-    st.dataframe(df_processado)
+    st.dataframe(df_processado, hide_index=True)
 
     busca = st.text_input("Filtrar por nome do produto")
     if busca:
@@ -217,5 +217,6 @@ if arquivo:
             df_processado["Nome"].str.contains(busca, case=False)
         ]
         st.write(df_filtrado)
+
 else:
-    st.info("Aguardando upload do arquivo Excel para gerar o relatório (aba lateral).")
+    st.info("[aba lateral] Aguardando upload do arquivo Excel para gerar o relatório.")
