@@ -30,8 +30,6 @@ FORMATACAO_ALERTAS = {
     "Markup (%)": "{:.2f} %",
 }
 
-print(1, 3)
-
 diclamer_aba = "As informações abaixos poderão ser alteradas conforme o :blue[filtro] na aba lateral"
 
 #   LOGIN

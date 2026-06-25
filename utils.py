@@ -35,9 +35,8 @@ def calcular_metricas(df, fator_giro, fator_margem):
 
     df["Giro"] = df["Qt Venda"] / (df["Qt Estoque"] + 0.01)
 
-    df["Margem (%)"] = (df["Vl Financ."] - df["CMV"]) / df["Vl Financ."] * 100
-
     df["Markup (%)"] = round(df["Margem (%)"], 3)
+    df["Margem (%)"] = (df["Vl Financ."] - df["CMV"]) / df["Vl Financ."] * 100
 
     # Resumo Financeiro
     total_venda = df["Vl Financ."].sum()
