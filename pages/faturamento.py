@@ -399,7 +399,35 @@ fig_kpi = go.Figure(
     )
 )
 
-st.plotly_chart(fig_kpi, width="stretch")
+
+# Cálculos da Projeção
+media_diaria = faturamento_mes_atual / dias_passados
+projecao_final = media_diaria * dias_uteis_totais
+percentual_projecao = (projecao_final / META_MENSAL) - 1
+
+
+col_gauche, col_projecao = st.columns([2, 1])
+with col_gauche:
+    st.plotly_chart(fig_kpi, width="stretch")
+with col_projecao:
+    st.markdown("### Projeção")
+    if (dias_uteis_totais - dias_passados) == 0:
+        st.info("Projeção indisponível - Mes Finalizado")
+    else:
+        # Cartão de métrica nativo do Streamlit mostrando o destino final
+        st.metric(
+            label="Projeção para o Fim do Mês",
+            value=f"R$ {projecao_final:,.2f}",
+            delta=f"{percentual_projecao:.1%} da Meta",
+            # delta_color="normal" if percentual_projecao >= 0 else "inverse",
+        )
+
+        # Texto de apoio rápido
+
+        if projecao_final >= META_MENSAL:
+            st.success("Mantendo o ritmo, a meta será atingida!")
+        else:
+            st.error("Atenção: O ritmo atual está abaixo da meta.")
 
 # --- Explicação Detalhada do KPI ---
 col_kpi1, colKpi22, col_kpi2, col_kpi3, col_kpi4 = st.columns(5)
