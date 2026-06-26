@@ -24,6 +24,7 @@ COLUNAS_EXCEL = [
 FORMATACAO_ALERTAS = {
     "Qt Estoque": "{:.2f}",
     "Qt Venda": "{:.2f}",
+    "Giro": "{:.2f}",
     "Total Venda [R$]": "R$ {:.2f}",
     "Total Custo [R$]": "R$ {:.2f}",
     "Margem (%)": "{:.2f} %",
@@ -192,16 +193,18 @@ st.divider()
 st.markdown("# :material/Bar_Chart: Gráficos")
 
 fig_TopMargem = CMV_fig_TOPMargem(df_processado)
-st.plotly_chart(fig_TopMargem, width="stretch", height="content")
-
 fig_TopFaturamento = CMV_fig_TOPFaturamento(df_processado)
-st.plotly_chart(fig_TopFaturamento, width="stretch")
-
 fig_teste = CMV_fig_Fin_Margem2(df_processado)
-st.plotly_chart(fig_teste, width="stretch")
-
 fig_teste2 = CMV_fig_Margem_Margem2(df_processado)
-st.plotly_chart(fig_teste2, width="stretch")
+
+col1_graph, col2_graph = st.columns(2)
+with col1_graph:
+    st.plotly_chart(fig_TopMargem, width="stretch", height="content")
+    st.plotly_chart(fig_teste2, width="stretch")
+
+with col2_graph:
+    st.plotly_chart(fig_TopFaturamento, width="stretch")
+    st.plotly_chart(fig_teste, width="stretch")
 
 # Exibição da Tabela
 st.divider()

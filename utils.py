@@ -35,6 +35,7 @@ def calcular_metricas(df, fator_giro, fator_margem):
     ]
 
     df["Giro"] = (df["Qt Venda"] / (df["Qt Estoque"] + 0.01)) * 100
+    df["Giro"] = round(df["Giro"], 2)
 
     df["Markup (%)"] = round(df["Margem (%)"], 3)
     df["Margem (%)"] = (df["Vl Financ."] - df["CMV"]) / df["Vl Financ."] * 100
@@ -62,13 +63,13 @@ def calcular_metricas(df, fator_giro, fator_margem):
         "Margem (%)", ascending=True
     )
 
-    alerta_giro = alerta_giro[colunas_padrao].sort_values("Margem (%)", ascending=False)
+    alerta_giro = alerta_giro[colunas_padrao].sort_values("Giro")
 
     alerta_prejuizo = df[df["Margem (%)"] < 0].copy()
     alerta_prejuizo = alerta_prejuizo[colunas_padrao]
 
     alerta_negativo = df[df["Qt Estoque"] < 0]
-    alerta_negativo = alerta_negativo[colunas_padrao]
+    alerta_negativo = alerta_negativo[colunas_padrao].sort_values("Qt Estoque")
 
     resumo = {
         "faturamento": total_venda,
