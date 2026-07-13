@@ -37,33 +37,37 @@ def cria_df_consolidado(lista_arquivos):
     return df_final
 
 
-def trata_df(df):
-    df_loja_010 = df[df["Cód. Empresa"] != 10]
-    if not df_loja_010.empty:
-        st.divider()
-        st.error(":material/Close: ERRO - Loja diferente da 010")
-        df_loja_010[
-            [
-                "Status",
-                "Cód. Empresa",
-                "Referência",
-                "Emissão",
-                "Número",
-                "Operação (Tipo)",
-                "Cliente/Fornecedor",
-                "Total",
-                "Arquivo Origem",
-            ]
-        ]
-        st.divider()
+def valida_empresas(df):
+    """
+    Valida as empresas e notas fiscais do DataFrame com base em três critérios:
+    1. Mais de 2 empresas sendo avaliadas simultaneamente -> ERRO CRÍTICO (para a execução)
+    2. Lojas/Empresas diferentes de 10 (010) ou 31 (031) -> ALERTA (exibe aviso e as linhas divergentes)
+    3. Notas Fiscais com status pendente -> ALERTA/ERRO (exibe aviso, expander com as notas e filtra-as do DataFrame)
+
+    Args:
+        df (pd.DataFrame): DataFrame com os dados.
+
+    Returns:
+        pd.DataFrame: DataFrame filtrado (sem as notas fiscais pendentes).
+    """
+
+    # 1. Há mais de 2 empresas sendo avaliadas -> ERRO CRÍTICO
+    num_empresas = df["Cód. Empresa"].nunique()
+    if num_empresas > 1:
+        st.error(
+            f":material/Close: **ERRO CRÍTICO:** Mais de 2 empresas distintas identificadas nos arquivos "
+            f"({num_empresas} encontradas: {list(df['Cód. Empresa'].unique())})."
+        )
         st.stop()
 
-    nf_pendente = df[df["Status"] == "NF Pendente"]
-    if not nf_pendente.empty:
-        st.error(f":material/Close: [{len(nf_pendente)}] NFs Pendentes")
-        df = df[df["Status"] != "NF Pendente"]
-        with st.expander("Verificar NFs"):
-            nf_pendente[
+    # 2. Valida se as lojas são diferentes de 10 (010) ou 31 (031) -> ALERTA
+    df_loja_divergente = df[~df["Cód. Empresa"].isin([10, 31, "010", "031"])]
+    if not df_loja_divergente.empty:
+        st.warning(
+            ":material/Warning: **ALERTA**: Transações com lojas diferentes de 010 e 031 encontradas."
+        )
+        st.dataframe(
+            df_loja_divergente[
                 [
                     "Status",
                     "Cód. Empresa",
@@ -76,9 +80,36 @@ def trata_df(df):
                     "Arquivo Origem",
                 ]
             ]
+        )
         st.divider()
 
-    df["Número"] = pd.to_numeric(df["Número"], errors="raise")
+    # 3. Status das NFe está como pendente
+    nf_pendente = df[df["Status"] == "NF Pendente"]
+    if not nf_pendente.empty:
+        st.error(f":material/Close: [{len(nf_pendente)}] NFs Pendentes")
+        df = df[df["Status"] != "NF Pendente"]
+        with st.expander("Verificar NFs"):
+            st.dataframe(
+                nf_pendente[
+                    [
+                        "Status",
+                        "Cód. Empresa",
+                        "Referência",
+                        "Emissão",
+                        "Número",
+                        "Operação (Tipo)",
+                        "Cliente/Fornecedor",
+                        "Total",
+                        "Arquivo Origem",
+                    ]
+                ]
+            )
+        st.divider()
+
+    return df["Cód. Empresa"].unique()
+
+
+def trata_df(df):
     df["Total"] = df["Total"].astype(str).str.replace(".", "").str.replace(",", ".")
     df["Total"] = pd.to_numeric(df["Total"], errors="raise")
     df["Referência"] = pd.to_datetime(df["Referência"], dayfirst=True, errors="coerce")
@@ -91,6 +122,30 @@ def trata_df(df):
     df_saida = df[df["Operação (Tipo)"] == "Saída"]
 
     return df_compra, df_venda, df_entrada, df_saida, df
+
+
+def calcular_dias_uteis(empresas, todos_os_dias, data_limite=None):
+    empresa_codes = set()
+    for e in empresas:
+        try:
+            val = int(float(e))
+            empresa_codes.add(val)
+        except (ValueError, TypeError):
+            empresa_codes.add(str(e).strip())
+
+    # Se empresa = 31, conta de domingo a sexta (exclui sábado: weekday != 5)
+    # Se empresa = 10 (ou padrão), conta apenas dias de semana (segunda a sexta: weekday < 5)
+    is_31 = 31 in empresa_codes or "31" in empresa_codes or "031" in empresa_codes
+
+    if is_31:
+        dias = [d for d in todos_os_dias if d.weekday() != 5]
+    else:
+        dias = [d for d in todos_os_dias if d.weekday() < 5]
+
+    if data_limite is not None:
+        dias = [d for d in dias if d <= data_limite]
+
+    return len(dias)
 
 
 def top10_clientes():
@@ -154,6 +209,12 @@ with st.sidebar:
             .replace("x", ".")
         )
 
+    st.markdown("## Dias úteis")
+    dias_uteis_input = st.number_input(
+        "Digite o número de dias úteis", min_value=0, step=1, max_value=31, format="%d"
+    )
+
+
 if not pegar_manual:
     st.error("Em Desenvolimento - Aguarde...")
     st.stop()
@@ -165,6 +226,7 @@ if not arquivos_carregados:
 
 df = cria_df_consolidado(arquivos_carregados)
 
+empresas = valida_empresas(df)
 df_compra, df_venda, df_entrada, df_saida, df = trata_df(df)
 with st.sidebar:
 
@@ -327,11 +389,13 @@ ano_atual = ultimo_mes.year
 todos_os_dias = pd.date_range(
     start=f"{ano_atual}-{mes_atual}-01", end=(ultimo_mes + pd.offsets.MonthEnd(0))
 )
-dias_uteis_totais = len(
-    [d for d in todos_os_dias if d.weekday() < 5]
-)  # 0-4 são Seg-Sex
-dias_passados = len(
-    [d for d in todos_os_dias if d.weekday() < 5 and d <= df_venda["Referência"].max()]
+
+if dias_uteis_input:
+    dias_uteis_totais = dias_uteis_input
+else:
+    dias_uteis_totais = calcular_dias_uteis(empresas, todos_os_dias)
+dias_passados = calcular_dias_uteis(
+    empresas, todos_os_dias, data_limite=df_venda["Referência"].max()
 )
 
 df_venda_mes_atual = df_venda[
