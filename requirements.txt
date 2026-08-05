@@ -7,3 +7,4 @@ supabase
 openpyxl
 babel
 python-calamine
+starlette=1.0.0
