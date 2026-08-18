@@ -6,6 +6,14 @@ login = st.Page("login.py", title="login", icon=":material/login:")
 
 
 # diretoria
+
+grupo_mumix = st.Page(
+    "pages/grupo_mumix.py",
+    title="Grupo Mumix",
+    icon=":material/work:",
+)
+
+
 faturamento = st.Page(
     "pages/faturamento.py",
     title="Faturamento",
@@ -36,7 +44,7 @@ gestao_colaboradores = st.Page(
 # custo_pesosal = st.Page("pages/custo_pessoal.py", title="Custo Pessoal", icon=":material/payment_arrow_down:"),
 
 pages = {
-    "Diretoria": [faturamento, cmv, resultado, devolucao],
+    "Diretoria": [grupo_mumix, faturamento, cmv, resultado, devolucao],
     "RH/DP": [gestao_colaboradores],
 }
 
